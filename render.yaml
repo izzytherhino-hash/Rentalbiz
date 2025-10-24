@@ -33,16 +33,6 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
 
-  # Frontend Static Site
-  - type: web
-    name: partay-frontend
-    region: oregon
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/dist
-    envVars:
-      - key: VITE_API_URL
-        sync: false
-
 databases:
   - name: partay-db
     databaseName: partay_rentals
