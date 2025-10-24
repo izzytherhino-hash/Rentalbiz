@@ -1,0 +1,525 @@
+"""
+Seed database with sample data for development.
+
+Creates:
+- 2 warehouses (Warehouse A - Main, Warehouse B - North)
+- 3 drivers (Mike Johnson, Sarah Chen, James Rodriguez)
+- 8 inventory items (bounce houses, concessions, etc.)
+"""
+
+from decimal import Decimal
+from sqlalchemy.orm import Session
+
+from backend.database.connection import SessionLocal
+from backend.database.models import (
+    Warehouse,
+    Driver,
+    InventoryItem,
+    Customer,
+    Booking,
+    BookingItem,
+    InventoryStatus,
+    BookingStatus,
+    PaymentStatus,
+)
+from datetime import date, timedelta
+
+
+def seed_warehouses(db: Session) -> dict[str, str]:
+    """
+    Seed warehouse data.
+
+    Returns:
+        Dict mapping warehouse names to their IDs
+    """
+    warehouses_data = [
+        {
+            "name": "Warehouse A - Main",
+            "address": "1500 Adams Ave, Costa Mesa, CA 92626",
+            "address_lat": Decimal("33.6595"),
+            "address_lng": Decimal("-117.9187"),
+            "is_active": True,
+        },
+        {
+            "name": "Warehouse B - North",
+            "address": "2800 Harbor Blvd, Costa Mesa, CA 92626",
+            "address_lat": Decimal("33.6712"),
+            "address_lng": Decimal("-117.9189"),
+            "is_active": True,
+        },
+    ]
+
+    warehouse_ids = {}
+    for data in warehouses_data:
+        warehouse = Warehouse(**data)
+        db.add(warehouse)
+        db.flush()  # Get the ID
+        warehouse_ids[data["name"]] = warehouse.warehouse_id
+
+    print(f"✅ Created {len(warehouses_data)} warehouses")
+    return warehouse_ids
+
+
+def seed_drivers(db: Session) -> dict[str, str]:
+    """
+    Seed driver data.
+
+    Returns:
+        Dict mapping driver names to their IDs
+    """
+    drivers_data = [
+        {
+            "name": "Mike Johnson",
+            "email": "mike.johnson@partay.com",
+            "phone": "(714) 555-0101",
+            "license_number": "CA-DL-12345678",
+            "is_active": True,
+        },
+        {
+            "name": "Sarah Chen",
+            "email": "sarah.chen@partay.com",
+            "phone": "(714) 555-0102",
+            "license_number": "CA-DL-23456789",
+            "is_active": True,
+        },
+        {
+            "name": "James Rodriguez",
+            "email": "james.rodriguez@partay.com",
+            "phone": "(714) 555-0103",
+            "license_number": "CA-DL-34567890",
+            "is_active": True,
+        },
+    ]
+
+    driver_ids = {}
+    for data in drivers_data:
+        driver = Driver(**data)
+        db.add(driver)
+        db.flush()
+        driver_ids[data["name"]] = driver.driver_id
+
+    print(f"✅ Created {len(drivers_data)} drivers")
+    return driver_ids
+
+
+def seed_inventory_items(db: Session, warehouse_ids: dict[str, str]) -> None:
+    """
+    Seed inventory item data.
+
+    Args:
+        warehouse_ids: Dict mapping warehouse names to their IDs
+    """
+    warehouse_a_id = warehouse_ids["Warehouse A - Main"]
+    warehouse_b_id = warehouse_ids["Warehouse B - North"]
+
+    items_data = [
+        {
+            "name": "Bounce House Castle",
+            "category": "Inflatable",
+            "base_price": Decimal("250.00"),
+            "requires_power": True,
+            "min_space_sqft": 225,  # 15x15
+            "allowed_surfaces": "grass,artificial_turf",
+            "default_warehouse_id": warehouse_a_id,
+            "current_warehouse_id": warehouse_a_id,
+            "status": InventoryStatus.AVAILABLE.value,
+        },
+        {
+            "name": "Water Slide Mega",
+            "category": "Inflatable",
+            "base_price": Decimal("350.00"),
+            "requires_power": True,
+            "min_space_sqft": 400,  # 20x20
+            "allowed_surfaces": "grass,artificial_turf",
+            "default_warehouse_id": warehouse_a_id,
+            "current_warehouse_id": warehouse_a_id,
+            "status": InventoryStatus.AVAILABLE.value,
+        },
+        {
+            "name": "Obstacle Course",
+            "category": "Inflatable",
+            "base_price": Decimal("400.00"),
+            "requires_power": True,
+            "min_space_sqft": 600,  # 30x20
+            "allowed_surfaces": "grass,artificial_turf",
+            "default_warehouse_id": warehouse_a_id,
+            "current_warehouse_id": warehouse_a_id,
+            "status": InventoryStatus.AVAILABLE.value,
+        },
+        {
+            "name": "Cotton Candy Machine",
+            "category": "Concession",
+            "base_price": Decimal("75.00"),
+            "requires_power": True,
+            "min_space_sqft": 0,
+            "allowed_surfaces": "grass,concrete,asphalt,artificial_turf,indoor",
+            "default_warehouse_id": warehouse_a_id,
+            "current_warehouse_id": warehouse_a_id,
+            "status": InventoryStatus.AVAILABLE.value,
+        },
+        {
+            "name": "Photo Booth Deluxe",
+            "category": "Entertainment",
+            "base_price": Decimal("200.00"),
+            "requires_power": True,
+            "min_space_sqft": 64,  # 8x8
+            "allowed_surfaces": "grass,concrete,asphalt,artificial_turf,indoor",
+            "default_warehouse_id": warehouse_b_id,
+            "current_warehouse_id": warehouse_b_id,
+            "status": InventoryStatus.AVAILABLE.value,
+        },
+        {
+            "name": "Popcorn Machine",
+            "category": "Concession",
+            "base_price": Decimal("65.00"),
+            "requires_power": True,
+            "min_space_sqft": 0,
+            "allowed_surfaces": "grass,concrete,asphalt,artificial_turf,indoor",
+            "default_warehouse_id": warehouse_b_id,
+            "current_warehouse_id": warehouse_b_id,
+            "status": InventoryStatus.AVAILABLE.value,
+        },
+        {
+            "name": "Mini Bounce House",
+            "category": "Inflatable",
+            "base_price": Decimal("150.00"),
+            "requires_power": True,
+            "min_space_sqft": 144,  # 12x12
+            "allowed_surfaces": "grass,artificial_turf",
+            "default_warehouse_id": warehouse_b_id,
+            "current_warehouse_id": warehouse_b_id,
+            "status": InventoryStatus.AVAILABLE.value,
+        },
+        {
+            "name": "Tables & Chairs Set",
+            "category": "Furniture",
+            "base_price": Decimal("50.00"),
+            "requires_power": False,
+            "min_space_sqft": 0,
+            "allowed_surfaces": "grass,concrete,asphalt,artificial_turf,indoor",
+            "default_warehouse_id": warehouse_b_id,
+            "current_warehouse_id": warehouse_b_id,
+            "status": InventoryStatus.AVAILABLE.value,
+        },
+    ]
+
+    for data in items_data:
+        item = InventoryItem(**data)
+        db.add(item)
+
+    print(f"✅ Created {len(items_data)} inventory items")
+
+
+def seed_customers(db: Session) -> dict[str, str]:
+    """
+    Seed customer data.
+
+    Returns:
+        Dict mapping customer names to their IDs
+    """
+    customers_data = [
+        {
+            "name": "Emily Martinez",
+            "email": "emily.martinez@email.com",
+            "phone": "(949) 555-0201",
+            "address": "1234 Oak Street, Irvine, CA 92602",
+            "address_lat": Decimal("33.6846"),
+            "address_lng": Decimal("-117.8265"),
+        },
+        {
+            "name": "David Thompson",
+            "email": "david.thompson@email.com",
+            "phone": "(949) 555-0202",
+            "address": "5678 Maple Avenue, Newport Beach, CA 92660",
+            "address_lat": Decimal("33.6189"),
+            "address_lng": Decimal("-117.9298"),
+        },
+        {
+            "name": "Jessica Williams",
+            "email": "jessica.williams@email.com",
+            "phone": "(714) 555-0203",
+            "address": "9012 Pine Drive, Costa Mesa, CA 92626",
+            "address_lat": Decimal("33.6595"),
+            "address_lng": Decimal("-117.9195"),
+        },
+        {
+            "name": "Michael Brown",
+            "email": "michael.brown@email.com",
+            "phone": "(714) 555-0204",
+            "address": "3456 Cedar Lane, Huntington Beach, CA 92648",
+            "address_lat": Decimal("33.6603"),
+            "address_lng": Decimal("-117.9992"),
+        },
+        {
+            "name": "Amanda Garcia",
+            "email": "amanda.garcia@email.com",
+            "phone": "(949) 555-0205",
+            "address": "7890 Birch Court, Laguna Beach, CA 92651",
+            "address_lat": Decimal("33.5427"),
+            "address_lng": Decimal("-117.7854"),
+        },
+    ]
+
+    customer_ids = {}
+    for data in customers_data:
+        customer = Customer(**data)
+        db.add(customer)
+        db.flush()
+        customer_ids[data["name"]] = customer.customer_id
+
+    print(f"✅ Created {len(customers_data)} customers")
+    return customer_ids
+
+
+def seed_bookings(
+    db: Session,
+    customer_ids: dict[str, str],
+    driver_ids: dict[str, str],
+    warehouse_ids: dict[str, str],
+) -> None:
+    """
+    Seed booking data with realistic scenarios.
+
+    Args:
+        customer_ids: Dict mapping customer names to their IDs
+        driver_ids: Dict mapping driver names to their IDs
+        warehouse_ids: Dict mapping warehouse names to their IDs
+    """
+    # Get inventory items for bookings
+    items = db.query(InventoryItem).all()
+    bounce_house = next((i for i in items if "Bounce House Castle" in i.name), None)
+    water_slide = next((i for i in items if "Water Slide" in i.name), None)
+    cotton_candy = next((i for i in items if "Cotton Candy" in i.name), None)
+    popcorn = next((i for i in items if "Popcorn" in i.name), None)
+    photo_booth = next((i for i in items if "Photo Booth" in i.name), None)
+    tables = next((i for i in items if "Tables" in i.name), None)
+
+    today = date.today()
+
+    # Helper function to calculate booking totals
+    def calculate_booking_totals(items_list, delivery_fee, tip):
+        subtotal = sum(item["inventory_item"].base_price * item["quantity"] for item in items_list)
+        total = subtotal + delivery_fee + tip
+        return {
+            "subtotal": subtotal,
+            "delivery_fee": delivery_fee,
+            "tip": tip,
+            "total": total
+        }
+
+    bookings_data = [
+        # Booking 1: Past completed booking
+        {
+            "customer_id": customer_ids["Emily Martinez"],
+            "delivery_date": today - timedelta(days=7),
+            "pickup_date": today - timedelta(days=5),
+            "delivery_address": "1234 Oak Street, Irvine, CA 92602",
+            "delivery_lat": Decimal("33.6846"),
+            "delivery_lng": Decimal("-117.8265"),
+            "setup_instructions": "Setup in backyard. Access through side gate.",
+            "status": BookingStatus.COMPLETED.value,
+            "assigned_driver_id": driver_ids["Mike Johnson"],
+            "pickup_driver_id": driver_ids["Mike Johnson"],
+            "payment_status": PaymentStatus.PAID.value,
+            "delivery_fee": Decimal("75.00"),
+            "tip": Decimal("25.00"),
+            "items": [
+                {"inventory_item": bounce_house, "quantity": 1},
+                {"inventory_item": cotton_candy, "quantity": 1},
+            ],
+        },
+        # Booking 2: Upcoming delivery tomorrow
+        {
+            "customer_id": customer_ids["David Thompson"],
+            "delivery_date": today + timedelta(days=1),
+            "pickup_date": today + timedelta(days=3),
+            "delivery_time_window": "10:00 AM - 12:00 PM",
+            "pickup_time_window": "2:00 PM - 4:00 PM",
+            "delivery_address": "5678 Maple Avenue, Newport Beach, CA 92660",
+            "delivery_lat": Decimal("33.6189"),
+            "delivery_lng": Decimal("-117.9298"),
+            "setup_instructions": "Front lawn setup. Park in driveway.",
+            "status": BookingStatus.CONFIRMED.value,
+            "assigned_driver_id": driver_ids["Sarah Chen"],
+            "payment_status": PaymentStatus.PAID.value,
+            "delivery_fee": Decimal("85.00"),
+            "tip": Decimal("50.00"),
+            "items": [
+                {"inventory_item": water_slide, "quantity": 1},
+                {"inventory_item": photo_booth, "quantity": 1},
+                {"inventory_item": popcorn, "quantity": 1},
+            ],
+        },
+        # Booking 3: Active rental (delivered, not picked up yet)
+        {
+            "customer_id": customer_ids["Jessica Williams"],
+            "delivery_date": today - timedelta(days=1),
+            "pickup_date": today + timedelta(days=1),
+            "delivery_address": "9012 Pine Drive, Costa Mesa, CA 92626",
+            "delivery_lat": Decimal("33.6595"),
+            "delivery_lng": Decimal("-117.9195"),
+            "setup_instructions": "Backyard party. Please call when arriving.",
+            "status": BookingStatus.ACTIVE.value,
+            "assigned_driver_id": driver_ids["James Rodriguez"],
+            "pickup_driver_id": driver_ids["James Rodriguez"],
+            "payment_status": PaymentStatus.PAID.value,
+            "delivery_fee": Decimal("50.00"),
+            "tip": Decimal("30.00"),
+            "items": [
+                {"inventory_item": bounce_house, "quantity": 1},
+                {"inventory_item": cotton_candy, "quantity": 1},
+                {"inventory_item": tables, "quantity": 1},
+            ],
+        },
+        # Booking 4: Future booking next weekend
+        {
+            "customer_id": customer_ids["Michael Brown"],
+            "delivery_date": today + timedelta(days=5),
+            "pickup_date": today + timedelta(days=7),
+            "delivery_time_window": "9:00 AM - 11:00 AM",
+            "pickup_time_window": "3:00 PM - 5:00 PM",
+            "delivery_address": "3456 Cedar Lane, Huntington Beach, CA 92648",
+            "delivery_lat": Decimal("33.6603"),
+            "delivery_lng": Decimal("-117.9992"),
+            "setup_instructions": "Birthday party setup in garage.",
+            "status": BookingStatus.CONFIRMED.value,
+            "assigned_driver_id": driver_ids["Mike Johnson"],
+            "payment_status": PaymentStatus.PAID.value,
+            "delivery_fee": Decimal("60.00"),
+            "tip": Decimal("35.00"),
+            "items": [
+                {"inventory_item": water_slide, "quantity": 1},
+                {"inventory_item": tables, "quantity": 2},
+                {"inventory_item": popcorn, "quantity": 1},
+            ],
+        },
+        # Booking 5: Pending booking (not confirmed yet)
+        {
+            "customer_id": customer_ids["Amanda Garcia"],
+            "delivery_date": today + timedelta(days=10),
+            "pickup_date": today + timedelta(days=12),
+            "delivery_address": "7890 Birch Court, Laguna Beach, CA 92651",
+            "delivery_lat": Decimal("33.5427"),
+            "delivery_lng": Decimal("-117.7854"),
+            "setup_instructions": "Beach house party. Large backyard.",
+            "status": BookingStatus.PENDING.value,
+            "payment_status": PaymentStatus.PENDING.value,
+            "delivery_fee": Decimal("95.00"),
+            "tip": Decimal("40.00"),
+            "items": [
+                {"inventory_item": water_slide, "quantity": 1},
+                {"inventory_item": bounce_house, "quantity": 1},
+                {"inventory_item": cotton_candy, "quantity": 1},
+                {"inventory_item": photo_booth, "quantity": 1},
+            ],
+        },
+    ]
+
+    for booking_data in bookings_data:
+        # Extract items data
+        items_data = booking_data.pop("items")
+
+        # Calculate totals from inventory prices
+        totals = calculate_booking_totals(items_data, booking_data["delivery_fee"], booking_data["tip"])
+        booking_data.update(totals)
+
+        # Create booking
+        booking = Booking(**booking_data)
+        db.add(booking)
+        db.flush()  # Get booking ID
+
+        # Create booking items with prices from inventory
+        for item_data in items_data:
+            inventory_item = item_data["inventory_item"]
+            booking_item = BookingItem(
+                booking_id=booking.booking_id,
+                inventory_item_id=inventory_item.inventory_item_id,
+                quantity=item_data["quantity"],
+                price=inventory_item.base_price,  # Use actual inventory item price
+                pickup_warehouse_id=inventory_item.current_warehouse_id,
+                return_warehouse_id=inventory_item.default_warehouse_id,
+            )
+            db.add(booking_item)
+
+        # Update customer stats
+        customer = db.query(Customer).filter(
+            Customer.customer_id == booking_data["customer_id"]
+        ).first()
+        if customer:
+            customer.total_bookings += 1
+            customer.total_spent += booking_data["total"]
+
+    print(f"✅ Created {len(bookings_data)} bookings with items")
+
+
+def seed_database() -> None:
+    """
+    Main function to seed the database with all sample data.
+
+    Creates:
+    - 2 warehouses
+    - 3 drivers
+    - 8 inventory items
+    - 5 customers
+    - 5 bookings with various statuses (completed, active, upcoming, pending)
+    """
+    db = SessionLocal()
+    try:
+        print("🌱 Starting database seeding...")
+
+        # Check what data already exists
+        existing_warehouses = db.query(Warehouse).count()
+        existing_drivers = db.query(Driver).count()
+        existing_items = db.query(InventoryItem).count()
+        existing_customers = db.query(Customer).count()
+        existing_bookings = db.query(Booking).count()
+
+        # Seed warehouses, drivers, and inventory if needed
+        if existing_warehouses == 0:
+            warehouse_ids = seed_warehouses(db)
+            driver_ids = seed_drivers(db)
+            seed_inventory_items(db, warehouse_ids)
+        else:
+            # Get existing IDs
+            warehouses = db.query(Warehouse).all()
+            warehouse_ids = {w.name: w.warehouse_id for w in warehouses}
+
+            drivers = db.query(Driver).all()
+            driver_ids = {d.name: d.driver_id for d in drivers}
+
+            print(f"ℹ️  Using existing {existing_warehouses} warehouses, {existing_drivers} drivers, {existing_items} items")
+
+        # Always seed customers and bookings if they don't exist
+        if existing_customers == 0:
+            customer_ids = seed_customers(db)
+        else:
+            print(f"⚠️  Database already has {existing_customers} customers. Skipping customer seeding.")
+            customers = db.query(Customer).all()
+            customer_ids = {c.name: c.customer_id for c in customers}
+
+        if existing_bookings == 0:
+            seed_bookings(db, customer_ids, driver_ids, warehouse_ids)
+        else:
+            print(f"⚠️  Database already has {existing_bookings} bookings. Skipping booking seeding.")
+
+        # Commit all changes
+        db.commit()
+        print("🎉 Database seeding completed successfully!")
+        print("\n📋 Summary:")
+        print(f"   • {db.query(Warehouse).count()} warehouses")
+        print(f"   • {db.query(Driver).count()} drivers")
+        print(f"   • {db.query(InventoryItem).count()} inventory items")
+        print(f"   • {db.query(Customer).count()} customers")
+        print(f"   • {db.query(Booking).count()} bookings")
+        print(f"   • {db.query(BookingItem).count()} booking items")
+
+    except Exception as e:
+        print(f"❌ Error seeding database: {e}")
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    seed_database()

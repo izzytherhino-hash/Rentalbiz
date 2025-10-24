@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* Custom fonts and base styles */
+@layer base {
+  body {
+    @apply m-0 font-sans antialiased;
+  }
+}

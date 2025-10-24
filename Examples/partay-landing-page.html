@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partay - AI-Powered Event Equipment Rentals</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #ffffff;
+            color: #333;
+        }
+
+        /* Header */
+        header {
+            background: #ffffff;
+            border-bottom: 1px solid #e5e5e5;
+            padding: 20px 0;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+        }
+
+        .logo-text {
+            font-family: Georgia, serif;
+            font-size: 36px;
+            font-weight: 300;
+            color: #1f2937;
+            letter-spacing: -0.5px;
+        }
+
+        .cta-button {
+            background: #FACC15;
+            color: #1f2937;
+            padding: 14px 32px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .cta-button:hover {
+            background: #F59E0B;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(250, 204, 21, 0.4);
+        }
+
+        /* Hero Section */
+        .hero {
+            margin-top: 90px;
+            padding: 100px 40px 60px;
+            background: linear-gradient(180deg, #ffffff 0%, #fef3c7 100%);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .hero h1 {
+            font-family: Georgia, serif;
+            font-size: 72px;
+            font-weight: 300;
+            color: #1f2937;
+            margin-bottom: 24px;
+            line-height: 1.1;
+            letter-spacing: -1px;
+        }
+
+        .hero-tagline {
+            font-size: 28px;
+            color: #6b7280;
+            margin-bottom: 48px;
+            font-weight: 300;
+        }
+
+        .hero-description {
+            font-size: 20px;
+            color: #4b5563;
+            line-height: 1.6;
+            margin-bottom: 48px;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+            margin-top: 48px;
+            margin-bottom: 80px;
+        }
+
+        /* Delivery Truck */
+        .truck-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .truck {
+            width: 100%;
+            height: auto;
+        }
+
+        .secondary-button {
+            background: transparent;
+            color: #1f2937;
+            padding: 14px 32px;
+            border: 2px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-decoration: none;
+        }
+
+        .secondary-button:hover {
+            border-color: #FACC15;
+            color: #FACC15;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 120px 40px;
+            background: #ffffff;
+        }
+
+        .features-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            font-family: Georgia, serif;
+            font-size: 48px;
+            font-weight: 300;
+            text-align: center;
+            color: #1f2937;
+            margin-bottom: 80px;
+            letter-spacing: -0.5px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 60px;
+        }
+
+        .feature {
+            text-align: center;
+        }
+
+        .feature-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #FACC15 0%, #F59E0B 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 40px;
+            box-shadow: 0 8px 24px rgba(250, 204, 21, 0.2);
+        }
+
+        .feature h3 {
+            font-size: 24px;
+            color: #1f2937;
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+
+        .feature p {
+            font-size: 16px;
+            color: #6b7280;
+            line-height: 1.6;
+        }
+
+        /* How It Works */
+        .how-it-works {
+            padding: 120px 40px;
+            background: #f9fafb;
+        }
+
+        .steps {
+            max-width: 1000px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+        }
+
+        .step {
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            border: 2px solid #e5e7eb;
+            transition: all 0.3s ease;
+        }
+
+        .step:hover {
+            border-color: #FACC15;
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        .step-number {
+            width: 50px;
+            height: 50px;
+            background: #FACC15;
+            color: #1f2937;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .step h3 {
+            font-size: 20px;
+            color: #1f2937;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .step p {
+            font-size: 15px;
+            color: #6b7280;
+            line-height: 1.6;
+        }
+
+        /* CTA Section */
+        .final-cta {
+            padding: 120px 40px;
+            background: linear-gradient(135deg, #FACC15 0%, #F59E0B 100%);
+            text-align: center;
+        }
+
+        .final-cta h2 {
+            font-family: Georgia, serif;
+            font-size: 56px;
+            font-weight: 300;
+            color: #1f2937;
+            margin-bottom: 32px;
+            letter-spacing: -0.5px;
+        }
+
+        .final-cta p {
+            font-size: 20px;
+            color: #3f3f46;
+            margin-bottom: 48px;
+        }
+
+        .final-cta .cta-button {
+            background: #1f2937;
+            color: #ffffff;
+            font-size: 18px;
+            padding: 18px 48px;
+        }
+
+        .final-cta .cta-button:hover {
+            background: #374151;
+        }
+
+        /* Footer */
+        footer {
+            background: #ffffff;
+            padding: 60px 40px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .footer-logo {
+            display: inline-flex;
+            align-items: center;
+            margin-bottom: 24px;
+            font-family: Georgia, serif;
+            font-size: 32px;
+            font-weight: 300;
+            color: #1f2937;
+        }
+
+        .footer-text {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 48px;
+            }
+
+            .hero-tagline {
+                font-size: 20px;
+            }
+
+            .hero-description {
+                font-size: 16px;
+            }
+
+            .section-title {
+                font-size: 36px;
+            }
+
+            .hero-cta {
+                flex-direction: column;
+            }
+
+            .final-cta h2 {
+                font-size: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-content">
+            <a href="#" class="logo">
+                <span class="logo-text">partay</span>
+            </a>
+            <a href="#" class="cta-button">Get Started</a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Let's Get The Partay Started</h1>
+            <p class="hero-tagline">AI-Powered Event Equipment Rentals</p>
+            <p class="hero-description">
+                Partay is an AI-enabled event equipment rental aggregator that designs your partay with you and then sources and arranges the best deals on rental equipment. So you get the best deal, best service and obviously, the best partay!
+            </p>
+            <div class="hero-cta">
+                <a href="#" class="cta-button">Plan Your Partay</a>
+                <a href="#how-it-works" class="secondary-button">How It Works</a>
+            </div>
+
+            <!-- Delivery Truck -->
+            <div class="truck-container">
+                <svg class="truck" viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Truck Body -->
+                    <rect x="250" y="100" width="300" height="120" fill="#FACC15" rx="10"/>
+                    
+                    <!-- Cab -->
+                    <path d="M 200 150 L 250 150 L 250 100 L 200 120 Z" fill="#F59E0B"/>
+                    <rect x="140" y="120" width="60" height="100" fill="#F59E0B" rx="8"/>
+                    
+                    <!-- Windows -->
+                    <rect x="150" y="130" width="40" height="35" fill="#E0F2FE" rx="4"/>
+                    <rect x="210" y="110" width="30" height="35" fill="#E0F2FE" rx="4"/>
+                    
+                    <!-- Branding on side -->
+                    <text x="400" y="160" font-family="Georgia, serif" font-size="48" font-weight="300" fill="#1f2937" text-anchor="middle">partay</text>
+                    
+                    <!-- Party decorations on truck -->
+                    <circle cx="320" cy="120" r="8" fill="#FF6B9D"/>
+                    <circle cx="480" cy="115" r="8" fill="#FF6B9D"/>
+                    <circle cx="340" cy="105" r="6" fill="#9333EA"/>
+                    <circle cx="460" cy="108" r="6" fill="#9333EA"/>
+                    <circle cx="380" cy="110" r="7" fill="#06B6D4"/>
+                    <circle cx="420" cy="112" r="7" fill="#06B6D4"/>
+                    
+                    <!-- Bottom detail line -->
+                    <line x1="250" y1="220" x2="550" y2="220" stroke="#F59E0B" stroke-width="3"/>
+                    
+                    <!-- Wheels -->
+                    <circle cx="180" cy="230" r="25" fill="#1f2937"/>
+                    <circle cx="180" cy="230" r="15" fill="#9CA3AF"/>
+                    <circle cx="300" cy="230" r="25" fill="#1f2937"/>
+                    <circle cx="300" cy="230" r="15" fill="#9CA3AF"/>
+                    <circle cx="500" cy="230" r="25" fill="#1f2937"/>
+                    <circle cx="500" cy="230" r="15" fill="#9CA3AF"/>
+                    
+                    <!-- Ground shadow -->
+                    <ellipse cx="350" cy="255" rx="200" ry="15" fill="#000000" opacity="0.1"/>
+                </svg>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="features-content">
+            <h2 class="section-title">Why Choose Partay?</h2>
+            <div class="features-grid">
+                <div class="feature">
+                    <div class="feature-icon">🤖</div>
+                    <h3>AI-Powered Design</h3>
+                    <p>Our AI helps you design the perfect party setup based on your space, budget, and style preferences.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">💰</div>
+                    <h3>Best Deals</h3>
+                    <p>We aggregate rental equipment from multiple suppliers to find you the absolute best prices.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🚚</div>
+                    <h3>Full Service</h3>
+                    <p>From delivery to setup to pickup, we handle all the logistics so you can focus on having fun.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="features-content">
+            <h2 class="section-title">How It Works</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>Tell Us About Your Event</h3>
+                    <p>Share your party details, space size, date, and style preferences with our AI assistant.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>Get AI-Designed Options</h3>
+                    <p>Receive personalized party setups with equipment recommendations that fit your space and budget.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>We Find The Best Deals</h3>
+                    <p>Our platform compares prices across vendors and secures the best rates for your equipment.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h3>Relax & Enjoy</h3>
+                    <p>We coordinate delivery, setup, and pickup. You just show up and celebrate!</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="final-cta">
+        <h2>Ready For The Best Partay Ever?</h2>
+        <p>Join thousands of happy party hosts who trust Partay for their celebrations.</p>
+        <a href="#" class="cta-button">Start Planning Now</a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-logo">
+                partay
+            </div>
+            <p class="footer-text">© 2025 Partay. All rights reserved. Let's get the partay started!</p>
+        </div>
+    </footer>
+</body>
+</html>
