@@ -296,6 +296,40 @@ class Booking(BookingBase):
     booking_items: List[BookingItem] = []
 
 
+# Simplified Booking Item for Customer Booking
+class SimpleBookingItem(BaseSchema):
+    """Simplified booking item for customer booking flow."""
+    inventory_item_id: str
+    quantity: int = Field(1, ge=1)
+
+
+# Customer Booking Create (simplified for customer booking flow)
+class CustomerBookingCreate(BaseSchema):
+    """Schema for creating a booking with customer details (customer booking flow)."""
+
+    # Customer details
+    customer_name: str = Field(..., min_length=1, max_length=255)
+    customer_email: EmailStr
+    customer_phone: str = Field(..., min_length=10, max_length=20)
+
+    # Booking details
+    delivery_date: date
+    pickup_date: date
+    delivery_address: str
+    delivery_latitude: Optional[float] = None
+    delivery_longitude: Optional[float] = None
+    items: List[SimpleBookingItem] = Field(..., min_length=1)
+    notes: Optional[str] = None
+
+    @field_validator("pickup_date")
+    @classmethod
+    def pickup_after_delivery(cls, v: date, info) -> date:
+        """Validate that pickup date is not before delivery date."""
+        if "delivery_date" in info.data and v < info.data["delivery_date"]:
+            raise ValueError("Pickup date must be on or after delivery date")
+        return v
+
+
 # Inventory Movement Schemas
 
 

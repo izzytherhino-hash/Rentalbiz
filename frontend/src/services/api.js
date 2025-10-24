@@ -36,7 +36,12 @@ async function apiFetch(endpoint, options = {}) {
           // If there are conflicts, add them to the message
           if (error.detail.conflicts && Array.isArray(error.detail.conflicts)) {
             const conflictList = error.detail.conflicts
-              .map(c => `Order ${c.order_number || 'N/A'} (${c.delivery_date} - ${c.pickup_date})`)
+              .map(c => {
+                if (c.item_name && c.conflicting_booking) {
+                  return `${c.item_name} conflicts with Order ${c.conflicting_booking} (${c.conflict_dates})`;
+                }
+                return `Item ${c.item_id || 'N/A'}: ${c.reason || 'Unavailable'}`;
+              })
               .join(', ');
             errorMessage += `. Conflicts: ${conflictList}`;
           }
@@ -98,6 +103,16 @@ export const bookingAPI = {
    */
   createBooking: async (bookingData) => {
     return apiFetch('/api/bookings', {
+      method: 'POST',
+      body: JSON.stringify(bookingData),
+    });
+  },
+
+  /**
+   * Create a new booking with customer details (simplified flow).
+   */
+  createCustomerBooking: async (bookingData) => {
+    return apiFetch('/api/bookings/customer', {
       method: 'POST',
       body: JSON.stringify(bookingData),
     });

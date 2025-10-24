@@ -26,6 +26,7 @@ from backend.database.schemas import (
     AvailabilityCheck,
     AvailabilityResponse,
     BookingCreate,
+    CustomerBookingCreate,
     Booking as BookingSchema,
     PartySpaceDetails,
     InventoryItem as InventoryItemSchema,
@@ -237,6 +238,164 @@ async def create_booking(
     # Update customer stats
     customer.total_bookings += 1
     customer.total_spent += booking_data.total
+
+    # Commit transaction
+    db.commit()
+    db.refresh(booking)
+
+    return booking
+
+
+@router.post("/customer", response_model=BookingSchema, status_code=status.HTTP_201_CREATED)
+async def create_customer_booking(
+    booking_data: CustomerBookingCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Create a new booking with customer details (simplified customer booking flow).
+
+    This endpoint handles:
+    - Finding or creating the customer by email
+    - Calculating prices automatically
+    - Creating the booking
+
+    Args:
+        booking_data: Customer and booking information
+        db: Database session
+
+    Returns:
+        Created booking with all details
+
+    Raises:
+        HTTPException: If items are unavailable or not found
+
+    Example:
+        POST /api/bookings/customer
+        {
+            "customer_name": "John Doe",
+            "customer_email": "john@example.com",
+            "customer_phone": "7145550100",
+            "delivery_date": "2025-10-26",
+            "pickup_date": "2025-10-27",
+            "delivery_address": "123 Main St",
+            "items": [
+                {"inventory_item_id": "item-uuid-1", "quantity": 1},
+                {"inventory_item_id": "item-uuid-2", "quantity": 1}
+            ]
+        }
+    """
+    # Find or create customer by email
+    customer = db.query(Customer).filter(Customer.email == booking_data.customer_email).first()
+
+    if not customer:
+        # Create new customer
+        customer = Customer(
+            name=booking_data.customer_name,
+            email=booking_data.customer_email,
+            phone=booking_data.customer_phone,
+        )
+        db.add(customer)
+        db.flush()  # Get customer ID
+
+    # Check availability
+    item_ids = [item.inventory_item_id for item in booking_data.items]
+    availability = check_availability(
+        db=db,
+        item_ids=item_ids,
+        delivery_date=booking_data.delivery_date,
+        pickup_date=booking_data.pickup_date,
+    )
+
+    if not availability["available"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Items not available for requested dates",
+                "conflicts": availability["conflicts"],
+            },
+        )
+
+    # Calculate prices
+    subtotal = Decimal("0.00")
+    item_prices = {}
+
+    for item_data in booking_data.items:
+        # Get item to get price
+        item = db.query(InventoryItem).filter(
+            InventoryItem.inventory_item_id == item_data.inventory_item_id
+        ).first()
+
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Item {item_data.inventory_item_id} not found",
+            )
+
+        # Calculate rental days
+        rental_days = calculate_rental_days(
+            booking_data.delivery_date,
+            booking_data.pickup_date,
+        )
+
+        # Calculate item price (base_price * days * quantity)
+        item_price = item.base_price * rental_days * item_data.quantity
+        item_prices[item_data.inventory_item_id] = item_price
+        subtotal += item_price
+
+    # Calculate fees
+    delivery_fee = Decimal("50.00")  # Flat delivery fee
+    total = subtotal + delivery_fee
+
+    # Generate order number
+    order_number = generate_order_number()
+
+    # Calculate rental days
+    rental_days = calculate_rental_days(
+        booking_data.delivery_date,
+        booking_data.pickup_date,
+    )
+
+    # Create booking
+    booking = Booking(
+        order_number=order_number,
+        customer_id=customer.customer_id,
+        delivery_date=booking_data.delivery_date,
+        pickup_date=booking_data.pickup_date,
+        rental_days=rental_days,
+        delivery_address=booking_data.delivery_address,
+        delivery_lat=Decimal(str(booking_data.delivery_latitude)) if booking_data.delivery_latitude else None,
+        delivery_lng=Decimal(str(booking_data.delivery_longitude)) if booking_data.delivery_longitude else None,
+        setup_instructions=booking_data.notes,
+        subtotal=subtotal,
+        delivery_fee=delivery_fee,
+        tip=Decimal("0.00"),
+        total=total,
+        status=BookingStatus.PENDING.value,
+        payment_status=PaymentStatus.PENDING.value,
+    )
+
+    db.add(booking)
+    db.flush()  # Get booking ID
+
+    # Create booking items
+    for item_data in booking_data.items:
+        item = db.query(InventoryItem).filter(
+            InventoryItem.inventory_item_id == item_data.inventory_item_id
+        ).first()
+
+        booking_item = BookingItem(
+            booking_id=booking.booking_id,
+            inventory_item_id=item_data.inventory_item_id,
+            quantity=item_data.quantity,
+            price=item_prices[item_data.inventory_item_id],
+            pickup_warehouse_id=item.current_warehouse_id,
+            return_warehouse_id=item.default_warehouse_id,
+        )
+        db.add(booking_item)
+
+    # Update customer stats
+    customer.total_bookings += 1
+    customer.total_spent += total
 
     # Commit transaction
     db.commit()

@@ -172,7 +172,8 @@ export default function CustomerBooking() {
         notes: `Party space: ${areaSizes.find(s => s.value === partyDetails.areaSize)?.label}, Surface: ${surfaceTypes.find(s => s.value === partyDetails.surface)?.label}, Power: ${partyDetails.hasPower ? 'Available' : 'Not Available'}`
       }
 
-      const result = await bookingAPI.createBooking(bookingData)
+      // Use the simplified customer booking endpoint
+      const result = await bookingAPI.createCustomerBooking(bookingData)
       setBookingConfirmation(result)
       setStep(5)
     } catch (err) {
