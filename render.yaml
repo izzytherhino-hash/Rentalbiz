@@ -6,7 +6,7 @@ services:
     region: oregon
     plan: free
     buildCommand: cd backend && pip install -r requirements.txt
-    startCommand: cd backend && uvicorn src.backend.main:app --host 0.0.0.0 --port $PORT
+    startCommand: cd backend/src && uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
