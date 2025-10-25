@@ -344,3 +344,74 @@ class TestDriverRouteEndpoints:
         assert len(data["deliveries"]) == 0
         assert len(data["pickups"]) == 0
         assert len(data["warehouse_returns"]) == 0
+
+
+class TestAdminEndpoints:
+    """Test admin dashboard endpoints."""
+
+    def test_update_booking_assign_driver_success(self, client, sample_booking, sample_driver):
+        """Test successfully assigning/updating a driver to a booking."""
+        # Assign/update driver
+        update_data = {"assigned_driver_id": sample_driver.driver_id}
+        response = client.patch(
+            f"/api/admin/bookings/{sample_booking.booking_id}",
+            json=update_data
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["assigned_driver_id"] == sample_driver.driver_id
+        assert data["booking_id"] == sample_booking.booking_id
+
+    def test_update_booking_invalid_driver_id(self, client, sample_booking):
+        """Test assigning non-existent driver to a booking."""
+        update_data = {"assigned_driver_id": "non-existent-driver-id"}
+        response = client.patch(
+            f"/api/admin/bookings/{sample_booking.booking_id}",
+            json=update_data
+        )
+
+        # Should succeed - validation happens at database level
+        # The driver_id is just a string, not a foreign key validation in Pydantic
+        assert response.status_code == 200
+
+    def test_update_booking_not_found(self, client, sample_driver):
+        """Test updating a non-existent booking."""
+        update_data = {"assigned_driver_id": sample_driver.driver_id}
+        response = client.patch(
+            "/api/admin/bookings/non-existent-booking-id",
+            json=update_data
+        )
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_update_booking_status(self, client, sample_booking):
+        """Test updating booking status."""
+        update_data = {"status": "confirmed"}
+        response = client.patch(
+            f"/api/admin/bookings/{sample_booking.booking_id}",
+            json=update_data
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "confirmed"
+
+    def test_update_booking_multiple_fields(self, client, sample_booking, sample_driver):
+        """Test updating multiple fields at once."""
+        update_data = {
+            "assigned_driver_id": sample_driver.driver_id,
+            "status": "confirmed",
+            "pickup_driver_id": sample_driver.driver_id
+        }
+        response = client.patch(
+            f"/api/admin/bookings/{sample_booking.booking_id}",
+            json=update_data
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["assigned_driver_id"] == sample_driver.driver_id
+        assert data["pickup_driver_id"] == sample_driver.driver_id
+        assert data["status"] == "confirmed"

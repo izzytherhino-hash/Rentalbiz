@@ -176,10 +176,11 @@ class InventoryItem(InventoryItemBase):
             if hasattr(data, "allowed_surfaces"):
                 allowed_surfaces = getattr(data, "allowed_surfaces")
                 if isinstance(allowed_surfaces, str):
-                    # Create a dict from the model and modify it
-                    data_dict = {key: getattr(data, key) for key in data.__mapper__.c.keys()}
-                    data_dict["allowed_surfaces"] = [s.strip() for s in allowed_surfaces.split(",") if s.strip()]
-                    return data_dict
+                    # Convert model to dict using model_dump if available, otherwise use __dict__
+                    if hasattr(data, "__dict__"):
+                        data_dict = {k: v for k, v in data.__dict__.items() if not k.startswith("_")}
+                        data_dict["allowed_surfaces"] = [s.strip() for s in allowed_surfaces.split(",") if s.strip()]
+                        return data_dict
         return data
 
 
