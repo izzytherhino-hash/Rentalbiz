@@ -92,7 +92,7 @@ def gather_database_context(db: Session, query: str) -> dict:
                     "status": b.status,
                     "delivery_date": str(b.delivery_date),
                     "pickup_date": str(b.pickup_date),
-                    "total_cost": float(b.total_cost),
+                    "total_cost": float(b.total),
                     "items": [bi.inventory_item.name for bi in b.booking_items],
                 }
                 for b in sorted(bookings, key=lambda x: x.created_at, reverse=True)[:10]
@@ -101,7 +101,7 @@ def gather_database_context(db: Session, query: str) -> dict:
                 status: len([b for b in bookings if b.status == status])
                 for status in set(b.status for b in bookings)
             },
-            "total_revenue": sum(float(b.total_cost) for b in bookings),
+            "total_revenue": sum(float(b.total) for b in bookings),
         }
 
     # Fetch inventory items
