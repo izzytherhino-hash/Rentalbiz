@@ -553,7 +553,7 @@ export default function AdminDashboard() {
                         ${booking.total_amount}
                       </div>
 
-                      {booking.driver_id ? (
+                      {booking.assigned_driver_id ? (
                         <div className="text-xs text-gray-500 flex items-center">
                           <Users className="w-3 h-3 mr-1" />
                           Driver assigned
