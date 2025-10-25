@@ -556,7 +556,7 @@ export default function AdminDashboard() {
                       {booking.assigned_driver_id ? (
                         <div className="text-xs text-gray-500 flex items-center">
                           <Users className="w-3 h-3 mr-1" />
-                          Driver assigned
+                          {drivers.find(d => d.driver_id === booking.assigned_driver_id)?.name || 'Driver assigned'}
                         </div>
                       ) : (
                         <div className="text-xs text-orange-600 flex items-center">
@@ -1370,7 +1370,7 @@ export default function AdminDashboard() {
                 {selectedBooking.assigned_driver_id ? (
                   <div className="flex items-center text-sm text-gray-700">
                     <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
-                    Driver assigned
+                    {drivers.find(d => d.driver_id === selectedBooking.assigned_driver_id)?.name || 'Driver assigned'}
                   </div>
                 ) : (
                   <>
