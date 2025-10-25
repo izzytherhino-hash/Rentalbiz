@@ -245,9 +245,8 @@ Please answer the user's question based on the provided database context."""
 
     try:
         # Call Claude API
-        # Allow model override via env var, default to stable Claude 3 Opus
-        # Note: Use "claude-3-5-sonnet-20241022" once available
-        model = os.getenv("CLAUDE_MODEL", "claude-3-opus-20240229")
+        # Allow model override via env var, default to latest stable Sonnet
+        model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
 
         response = client.messages.create(
             model=model,
