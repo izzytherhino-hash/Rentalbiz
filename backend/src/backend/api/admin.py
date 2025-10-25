@@ -340,6 +340,21 @@ async def migrate_schema(db: Session = Depends(get_db)):
             ALTER TABLE inventory_items
             ADD COLUMN IF NOT EXISTS image_url TEXT
             """,
+            # Add website_visible to inventory_items
+            """
+            ALTER TABLE inventory_items
+            ADD COLUMN IF NOT EXISTS website_visible BOOLEAN DEFAULT TRUE
+            """,
+            # Add requires_power to inventory_items
+            """
+            ALTER TABLE inventory_items
+            ADD COLUMN IF NOT EXISTS requires_power BOOLEAN DEFAULT FALSE
+            """,
+            # Add min_space_sqft to inventory_items
+            """
+            ALTER TABLE inventory_items
+            ADD COLUMN IF NOT EXISTS min_space_sqft INTEGER DEFAULT 0
+            """,
             # Add on_time_deliveries to drivers
             """
             ALTER TABLE drivers
