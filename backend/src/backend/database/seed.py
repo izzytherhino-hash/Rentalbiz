@@ -3,8 +3,9 @@ Seed database with sample data for development.
 
 Creates:
 - 2 warehouses (Warehouse A - Main, Warehouse B - North)
-- 3 drivers (Mike Johnson, Sarah Chen, James Rodriguez)
+- 3 drivers with performance metrics (Mike Johnson, Sarah Chen, James Rodriguez)
 - 8 inventory items (bounce houses, concessions, etc.)
+- 5 customers with sample bookings
 """
 
 from decimal import Decimal
@@ -63,7 +64,7 @@ def seed_warehouses(db: Session) -> dict[str, str]:
 
 def seed_drivers(db: Session) -> dict[str, str]:
     """
-    Seed driver data.
+    Seed driver data with performance metrics.
 
     Returns:
         Dict mapping driver names to their IDs
@@ -75,6 +76,13 @@ def seed_drivers(db: Session) -> dict[str, str]:
             "phone": "(714) 555-0101",
             "license_number": "CA-DL-12345678",
             "is_active": True,
+            # Performance metrics - top performer
+            "total_deliveries": 47,
+            "total_earnings": Decimal("3525.00"),
+            "on_time_deliveries": 44,
+            "late_deliveries": 3,
+            "avg_rating": Decimal("4.8"),
+            "total_ratings": 42,
         },
         {
             "name": "Sarah Chen",
@@ -82,6 +90,13 @@ def seed_drivers(db: Session) -> dict[str, str]:
             "phone": "(714) 555-0102",
             "license_number": "CA-DL-23456789",
             "is_active": True,
+            # Performance metrics - consistent performer
+            "total_deliveries": 38,
+            "total_earnings": Decimal("2850.00"),
+            "on_time_deliveries": 35,
+            "late_deliveries": 3,
+            "avg_rating": Decimal("4.6"),
+            "total_ratings": 35,
         },
         {
             "name": "James Rodriguez",
@@ -89,6 +104,13 @@ def seed_drivers(db: Session) -> dict[str, str]:
             "phone": "(714) 555-0103",
             "license_number": "CA-DL-34567890",
             "is_active": True,
+            # Performance metrics - newer driver
+            "total_deliveries": 23,
+            "total_earnings": Decimal("1725.00"),
+            "on_time_deliveries": 20,
+            "late_deliveries": 3,
+            "avg_rating": Decimal("4.5"),
+            "total_ratings": 20,
         },
     ]
 
@@ -99,7 +121,7 @@ def seed_drivers(db: Session) -> dict[str, str]:
         db.flush()
         driver_ids[data["name"]] = driver.driver_id
 
-    print(f"✅ Created {len(drivers_data)} drivers")
+    print(f"✅ Created {len(drivers_data)} drivers with performance metrics")
     return driver_ids
 
 
