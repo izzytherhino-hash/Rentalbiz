@@ -312,6 +312,33 @@ async def get_drivers_workload(db: Session = Depends(get_db)):
     return {"drivers": workload}
 
 
+@router.post("/migrate-schema")
+async def migrate_schema(db: Session = Depends(get_db)):
+    """
+    Create or update database schema to match current models.
+
+    This is safe to run on existing databases - it only adds missing tables/columns.
+
+    Returns:
+        dict: Migration status
+    """
+    from backend.database import Base, engine
+
+    try:
+        # Create all tables and columns that don't exist
+        Base.metadata.create_all(bind=engine)
+
+        return {
+            "success": True,
+            "message": "Database schema updated successfully"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error migrating schema: {str(e)}"
+        )
+
+
 @router.post("/seed-database")
 async def seed_database(db: Session = Depends(get_db)):
     """
