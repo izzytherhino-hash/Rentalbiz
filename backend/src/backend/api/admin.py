@@ -315,27 +315,66 @@ async def get_drivers_workload(db: Session = Depends(get_db)):
 @router.post("/migrate-schema")
 async def migrate_schema(db: Session = Depends(get_db)):
     """
-    Create or update database schema to match current models.
+    Add missing columns to existing database tables.
 
-    This is safe to run on existing databases - it only adds missing tables/columns.
+    This endpoint safely adds columns that don't exist without affecting existing data.
 
     Returns:
         dict: Migration status
     """
-    from backend.database import Base, engine
+    from sqlalchemy import text
+
+    migrations_applied = []
+    errors = []
 
     try:
-        # Create all tables and columns that don't exist
-        Base.metadata.create_all(bind=engine)
+        # List of ALTER TABLE statements to add missing columns
+        migrations = [
+            # Add description to inventory_items
+            """
+            ALTER TABLE inventory_items
+            ADD COLUMN IF NOT EXISTS description TEXT
+            """,
+            # Add image_url to inventory_items
+            """
+            ALTER TABLE inventory_items
+            ADD COLUMN IF NOT EXISTS image_url TEXT
+            """,
+            # Add on_time_deliveries to drivers
+            """
+            ALTER TABLE drivers
+            ADD COLUMN IF NOT EXISTS on_time_deliveries INTEGER DEFAULT 0
+            """,
+            # Add late_deliveries to drivers
+            """
+            ALTER TABLE drivers
+            ADD COLUMN IF NOT EXISTS late_deliveries INTEGER DEFAULT 0
+            """,
+        ]
+
+        # Execute each migration
+        for migration in migrations:
+            try:
+                db.execute(text(migration))
+                db.commit()
+                # Extract column name for reporting
+                col_name = migration.split("ADD COLUMN IF NOT EXISTS")[1].split()[0] if "ADD COLUMN" in migration else "unknown"
+                migrations_applied.append(f"Added column: {col_name}")
+            except Exception as e:
+                error_msg = f"Migration failed: {str(e)}"
+                errors.append(error_msg)
+                db.rollback()
 
         return {
-            "success": True,
-            "message": "Database schema updated successfully"
+            "success": len(errors) == 0,
+            "message": "Schema migration completed",
+            "migrations_applied": migrations_applied,
+            "errors": errors if errors else None
         }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error migrating schema: {str(e)}"
+            detail=f"Error during migration: {str(e)}"
         )
 
 
