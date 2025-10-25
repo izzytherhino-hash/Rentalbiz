@@ -1367,7 +1367,7 @@ export default function AdminDashboard() {
               {/* Driver Assignment */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-3">Driver Assignment</h3>
-                {selectedBooking.driver_id ? (
+                {selectedBooking.assigned_driver_id ? (
                   <div className="flex items-center text-sm text-gray-700">
                     <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
                     Driver assigned
