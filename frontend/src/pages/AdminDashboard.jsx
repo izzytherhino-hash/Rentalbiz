@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Package, Truck, MapPin, DollarSign, AlertCircle, Clock, Search, Plus, Filter, Users, Warehouse, CheckCircle, Calendar, X, Edit } from 'lucide-react'
+import { Package, Truck, MapPin, DollarSign, AlertCircle, Clock, Search, Plus, Filter, Users, Warehouse, CheckCircle, Calendar, X, Edit, Trash2 } from 'lucide-react'
 import { adminAPI, inventoryAPI, driverAPI } from '../services/api'
 import Chatbot from '../components/Chatbot'
+import InventoryModal from '../components/InventoryModal'
 
 export default function AdminDashboard() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
@@ -26,6 +27,10 @@ export default function AdminDashboard() {
     license_number: '',
     is_active: true
   })
+  const [showInventoryModal, setShowInventoryModal] = useState(false)
+  const [editingItem, setEditingItem] = useState(null)
+  const [warehouses, setWarehouses] = useState([])
+  const [assigningDriver, setAssigningDriver] = useState(false)
 
   // Fetch initial data
   useEffect(() => {
@@ -128,12 +133,17 @@ export default function AdminDashboard() {
   }
 
   const handleAssignDriver = async (bookingId, driverId) => {
+    setAssigningDriver(true)
+    setError(null)
     try {
       await adminAPI.updateBooking(bookingId, { assigned_driver_id: driverId })
       await fetchDashboardData() // Refresh data
     } catch (err) {
       setError('Failed to assign driver')
       console.error('Error assigning driver:', err)
+      throw err // Re-throw to let the caller handle it
+    } finally {
+      setAssigningDriver(false)
     }
   }
 
@@ -209,6 +219,74 @@ export default function AdminDashboard() {
     }
   }
 
+  // Inventory Management Functions
+  const openInventoryModal = (item = null) => {
+    setEditingItem(item)
+    setShowInventoryModal(true)
+  }
+
+  const closeInventoryModal = () => {
+    setShowInventoryModal(false)
+    setEditingItem(null)
+  }
+
+  const handleSaveInventoryItem = async (itemData) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      if (editingItem) {
+        // Update existing item
+        await inventoryAPI.updateItem(editingItem.inventory_item_id, itemData)
+      } else {
+        // Create new item
+        await inventoryAPI.createItem(itemData)
+      }
+      await fetchDashboardData() // Refresh data
+      closeInventoryModal()
+    } catch (err) {
+      setError(editingItem ? 'Failed to update item' : 'Failed to create item')
+      console.error('Error saving inventory item:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteInventoryItem = async (itemId) => {
+    if (!confirm('Are you sure you want to delete this item? This cannot be undone.')) {
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      await inventoryAPI.deleteItem(itemId)
+      await fetchDashboardData() // Refresh data
+    } catch (err) {
+      setError(err.message || 'Failed to delete item')
+      console.error('Error deleting inventory item:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Get warehouses from seed data (hardcoded for now)
+  useEffect(() => {
+    // In production, fetch from an API endpoint
+    // For now, use the warehouses from seed data
+    setWarehouses([
+      {
+        warehouse_id: '550e8400-e29b-41d4-a716-446655440001',
+        name: 'Warehouse A - Main'
+      },
+      {
+        warehouse_id: '550e8400-e29b-41d4-a716-446655440002',
+        name: 'Warehouse B - North'
+      }
+    ])
+  }, [])
+
   if (loading && !bookings.length) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -234,7 +312,7 @@ export default function AdminDashboard() {
             </div>
             <button
               onClick={fetchDashboardData}
-              className="bg-yellow-400 text-white px-3 sm:px-4 lg:px-6 py-2 sm:py-3 rounded-lg text-sm font-medium hover:bg-yellow-500 transition flex items-center"
+              className="bg-yellow-400 text-gray-800 px-3 sm:px-4 lg:px-6 py-2 sm:py-3 rounded-lg text-sm font-medium hover:bg-yellow-500 transition flex items-center uppercase tracking-wide"
             >
               <Package className="w-4 h-4 sm:w-5 sm:h-5 sm:mr-2" />
               <span className="hidden sm:inline">Refresh</span>
@@ -499,11 +577,11 @@ export default function AdminDashboard() {
                 <div className="space-y-2">
                   <button
                     onClick={() => window.location.href = '/book'}
-                    className="w-full flex items-center justify-between py-3 px-4 bg-yellow-400 text-white rounded-lg font-medium hover:bg-yellow-500 transition"
+                    className="w-full flex items-center justify-between py-3 px-4 bg-yellow-400 text-gray-800 rounded-lg font-medium hover:bg-yellow-500 transition"
                   >
                     <div className="flex items-center">
                       <Plus className="w-4 h-4 mr-2" />
-                      <span className="text-sm">Create Booking</span>
+                      <span className="text-sm uppercase tracking-wide">Create Booking</span>
                     </div>
                   </button>
                   <button
@@ -551,33 +629,93 @@ export default function AdminDashboard() {
 
         {/* Inventory View */}
         {view === 'inventory' && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="font-serif text-xl font-light text-gray-800 mb-4">
-              Inventory Tracking
-            </h2>
-            <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-serif text-lg sm:text-xl font-light text-gray-800">
+                Inventory Management
+              </h2>
+              <button
+                onClick={() => openInventoryModal()}
+                className="bg-yellow-400 text-gray-800 px-4 py-2 rounded-lg font-medium hover:bg-yellow-500 transition flex items-center text-sm"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Item
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {inventory.map(item => (
                 <div
                   key={item.inventory_item_id}
-                  onClick={() => setSelectedItem(item)}
-                  className="border-2 border-gray-200 rounded-lg p-4 hover:border-yellow-400 transition cursor-pointer"
+                  className="border-2 border-gray-200 rounded-lg p-4"
                 >
-                  <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       <h3 className="font-medium text-gray-800">{item.name}</h3>
                       <p className="text-sm text-gray-600">{item.category}</p>
+                      {item.description && (
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.description}</p>
+                      )}
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded ${
+                    <span className={`text-xs px-2 py-1 rounded ml-2 ${
                       item.status === 'available'
                         ? 'bg-green-100 text-green-800'
-                        : 'bg-yellow-100 text-yellow-800'
+                        : item.status === 'rented'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
                     }`}>
                       {item.status}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-sm mt-3 pt-3 border-t border-gray-200">
-                    <span className="text-gray-600">Price:</span>
-                    <span className="font-medium text-gray-800">${item.base_price}</span>
+
+                  <div className="grid grid-cols-2 gap-2 py-3 border-t border-gray-200">
+                    <div>
+                      <div className="text-sm text-gray-600">Price</div>
+                      <div className="text-lg font-medium text-gray-800">${item.base_price}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600">Warehouse</div>
+                      <div className="text-xs text-gray-800 truncate">
+                        {warehouses.find(w => w.warehouse_id === item.current_warehouse_id)?.name || 'Unknown'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {(item.requires_power || item.min_space_sqft || item.allowed_surfaces?.length > 0) && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {item.requires_power && (
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          Requires Power
+                        </span>
+                      )}
+                      {item.min_space_sqft && (
+                        <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                          {item.min_space_sqft} sq ft
+                        </span>
+                      )}
+                      {item.website_visible && (
+                        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                          On Website
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-3 border-t border-gray-200">
+                    <button
+                      onClick={() => openInventoryModal(item)}
+                      className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-gray-200 transition flex items-center justify-center"
+                    >
+                      <Edit className="w-4 h-4 mr-1" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteInventoryItem(item.inventory_item_id)}
+                      className="flex-1 bg-red-100 text-red-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-red-200 transition flex items-center justify-center"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Delete
+                    </button>
                   </div>
                 </div>
               ))}
@@ -594,7 +732,7 @@ export default function AdminDashboard() {
               </h2>
               <button
                 onClick={() => openDriverModal()}
-                className="bg-yellow-400 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-500 transition flex items-center text-sm"
+                className="bg-yellow-400 text-gray-800 px-4 py-2 rounded-lg font-medium hover:bg-yellow-500 transition flex items-center text-sm"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Driver
@@ -616,7 +754,7 @@ export default function AdminDashboard() {
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 flex-shrink-0 ${
                           driver.is_active ? 'bg-yellow-400' : 'bg-gray-400'
                         }`}>
-                          <Users className="w-5 h-5 text-white" />
+                          <Users className={`w-5 h-5 ${driver.is_active ? 'text-gray-800' : 'text-white'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
@@ -645,21 +783,50 @@ export default function AdminDashboard() {
                         <div className="text-lg font-light text-gray-800">
                           {workload?.assigned_bookings || 0}
                         </div>
-                        <div className="text-xs text-gray-500">Active Jobs</div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wide">Active</div>
                       </div>
                       <div className="text-center">
                         <div className="text-lg font-light text-gray-800">
                           {driver.total_deliveries || 0}
                         </div>
-                        <div className="text-xs text-gray-500">Total Deliveries</div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wide">Deliveries</div>
                       </div>
                       <div className="text-center">
                         <div className="text-lg font-light text-yellow-600">
                           ${Number(driver.total_earnings || 0).toFixed(0)}
                         </div>
-                        <div className="text-xs text-gray-500">Earnings</div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wide">Earned</div>
                       </div>
                     </div>
+
+                    {/* Performance Metrics */}
+                    {driver.total_deliveries > 0 && (
+                      <div className="grid grid-cols-2 gap-2 py-3 border-t border-gray-200">
+                        <div className="text-center">
+                          <div className="flex items-center justify-center gap-1 mb-1">
+                            {driver.avg_rating ? (
+                              <>
+                                <span className="text-lg font-serif text-gray-800">{Number(driver.avg_rating).toFixed(1)}</span>
+                                <span className="text-yellow-400">★</span>
+                              </>
+                            ) : (
+                              <span className="text-sm text-gray-400">No ratings</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 uppercase tracking-wide">
+                            Rating {driver.total_ratings > 0 && `(${driver.total_ratings})`}
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-light text-gray-800">
+                            {driver.on_time_deliveries + driver.late_deliveries > 0
+                              ? Math.round((driver.on_time_deliveries / (driver.on_time_deliveries + driver.late_deliveries)) * 100)
+                              : 0}%
+                          </div>
+                          <div className="text-xs text-gray-500 uppercase tracking-wide">On-Time</div>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
                       <button
@@ -708,7 +875,7 @@ export default function AdminDashboard() {
                       </div>
                       <select
                         onChange={(e) => handleAssignDriver(booking.booking_id, e.target.value)}
-                        className="w-full bg-yellow-400 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-yellow-500 transition focus:outline-none"
+                        className="w-full bg-yellow-400 text-gray-800 py-2 px-3 rounded-lg text-sm font-medium hover:bg-yellow-500 transition focus:outline-none"
                         defaultValue=""
                       >
                         <option value="" disabled>Assign Driver</option>
@@ -1035,7 +1202,7 @@ export default function AdminDashboard() {
               <div className="mt-6">
                 <button
                   onClick={() => setSelectedItem(null)}
-                  className="w-full py-3 bg-yellow-400 text-white rounded-lg font-medium hover:bg-yellow-500 transition"
+                  className="w-full py-3 bg-yellow-400 text-gray-800 rounded-lg font-medium hover:bg-yellow-500 transition"
                 >
                   Close
                 </button>
@@ -1206,21 +1373,37 @@ export default function AdminDashboard() {
                     Driver assigned
                   </div>
                 ) : (
-                  <select
-                    onChange={(e) => {
-                      handleAssignDriver(selectedBooking.booking_id, e.target.value)
-                      setSelectedBooking(null)
-                    }}
-                    className="w-full bg-yellow-400 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-yellow-500 transition focus:outline-none"
-                    defaultValue=""
-                  >
-                    <option value="" disabled>Assign Driver</option>
-                    {drivers.map(driver => (
-                      <option key={driver.driver_id} value={driver.driver_id} className="text-gray-800">
-                        {driver.name}
+                  <>
+                    <select
+                      onChange={async (e) => {
+                        const driverId = e.target.value
+                        if (!driverId) return
+
+                        try {
+                          await handleAssignDriver(selectedBooking.booking_id, driverId)
+                          setSelectedBooking(null)
+                        } catch (err) {
+                          console.error('Error assigning driver:', err)
+                          // Keep modal open on error so user can see the error message
+                        }
+                      }}
+                      disabled={assigningDriver}
+                      className="w-full bg-yellow-400 text-gray-800 py-2 px-3 rounded-lg text-sm font-medium hover:bg-yellow-500 transition focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      defaultValue=""
+                    >
+                      <option value="" disabled>
+                        {assigningDriver ? 'Assigning...' : 'Assign Driver'}
                       </option>
-                    ))}
-                  </select>
+                      {drivers.map(driver => (
+                        <option key={driver.driver_id} value={driver.driver_id} className="text-gray-800">
+                          {driver.name}
+                        </option>
+                      ))}
+                    </select>
+                    {assigningDriver && (
+                      <p className="text-sm text-gray-600 mt-2">Assigning driver...</p>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -1238,7 +1421,7 @@ export default function AdminDashboard() {
                 </button>
                 <button
                   onClick={() => setSelectedBooking(null)}
-                  className="flex-1 py-3 bg-yellow-400 text-white rounded-lg font-medium hover:bg-yellow-500 transition"
+                  className="flex-1 py-3 bg-yellow-400 text-gray-800 rounded-lg font-medium hover:bg-yellow-500 transition"
                 >
                   Close
                 </button>
@@ -1355,7 +1538,7 @@ export default function AdminDashboard() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 py-3 bg-yellow-400 text-white rounded-lg font-medium hover:bg-yellow-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 py-3 bg-yellow-400 text-gray-800 rounded-lg font-medium hover:bg-yellow-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? 'Saving...' : editingDriver ? 'Update Driver' : 'Add Driver'}
                   </button>
@@ -1364,6 +1547,16 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Inventory Modal */}
+      {showInventoryModal && (
+        <InventoryModal
+          item={editingItem}
+          warehouses={warehouses}
+          onClose={closeInventoryModal}
+          onSave={handleSaveInventoryItem}
+        />
       )}
 
       {/* AI Chatbot */}

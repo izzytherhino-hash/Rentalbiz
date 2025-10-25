@@ -7,8 +7,8 @@ All schemas use ConfigDict for ORM mode and validation settings.
 
 from datetime import datetime, date
 from decimal import Decimal
-from typing import List, Optional
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+from typing import List, Optional, Any
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, field_serializer, model_validator
 
 from backend.database.models import (
     BookingStatus,
@@ -31,6 +31,7 @@ class BaseSchema(BaseModel):
         from_attributes=True,
         use_enum_values=True,
         populate_by_name=True,
+        arbitrary_types_allowed=True,
     )
 
 
@@ -118,7 +119,10 @@ class InventoryItemBase(BaseSchema):
 
     name: str = Field(..., min_length=1, max_length=255)
     category: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
     base_price: Decimal = Field(..., gt=0, decimal_places=2)
+    image_url: Optional[str] = None
+    website_visible: bool = True
     requires_power: bool = False
     min_space_sqft: Optional[int] = Field(None, ge=0)
     allowed_surfaces: Optional[List[str]] = None
@@ -136,7 +140,10 @@ class InventoryItemUpdate(BaseSchema):
 
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     category: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
     base_price: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
+    image_url: Optional[str] = None
+    website_visible: Optional[bool] = None
     requires_power: Optional[bool] = None
     min_space_sqft: Optional[int] = Field(None, ge=0)
     allowed_surfaces: Optional[List[str]] = None
@@ -151,15 +158,29 @@ class InventoryItem(InventoryItemBase):
     inventory_item_id: str
     current_warehouse_id: Optional[str]
     status: str
+    description: Optional[str]
+    image_url: Optional[str]
+    website_visible: bool
     created_at: datetime
 
-    @field_validator("allowed_surfaces", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def parse_allowed_surfaces(cls, v):
-        """Convert comma-separated string to list."""
-        if isinstance(v, str):
-            return [s.strip() for s in v.split(",") if s.strip()]
-        return v
+    def convert_allowed_surfaces(cls, data: Any) -> Any:
+        """Convert allowed_surfaces from comma-separated string to list."""
+        if isinstance(data, dict):
+            allowed_surfaces = data.get("allowed_surfaces")
+            if isinstance(allowed_surfaces, str):
+                data["allowed_surfaces"] = [s.strip() for s in allowed_surfaces.split(",") if s.strip()]
+        else:
+            # Handle SQLAlchemy model objects
+            if hasattr(data, "allowed_surfaces"):
+                allowed_surfaces = getattr(data, "allowed_surfaces")
+                if isinstance(allowed_surfaces, str):
+                    # Create a dict from the model and modify it
+                    data_dict = {key: getattr(data, key) for key in data.__mapper__.c.keys()}
+                    data_dict["allowed_surfaces"] = [s.strip() for s in allowed_surfaces.split(",") if s.strip()]
+                    return data_dict
+        return data
 
 
 # Driver Schemas
@@ -197,6 +218,10 @@ class Driver(DriverBase):
     driver_id: str
     total_deliveries: int
     total_earnings: Decimal
+    on_time_deliveries: int
+    late_deliveries: int
+    avg_rating: Optional[Decimal]
+    total_ratings: int
     created_at: datetime
 
 

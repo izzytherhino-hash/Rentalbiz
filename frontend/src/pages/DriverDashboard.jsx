@@ -187,12 +187,12 @@ export default function DriverDashboard() {
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
           <div className="text-center mb-8">
             <div className="w-20 h-20 bg-yellow-400 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Package className="w-10 h-10 text-white" />
+              <Package className="w-10 h-10 text-gray-800" />
             </div>
             <h1 className="font-serif text-3xl font-light text-gray-800 mb-2">
               Driver Portal
             </h1>
-            <p className="text-gray-600 text-sm">Select your name to view route</p>
+            <p className="text-gray-600 text-sm uppercase tracking-wide">Select your name to view route</p>
           </div>
 
           {error && (
@@ -250,7 +250,7 @@ export default function DriverDashboard() {
                 {stops.length > 0 && (
                   <button
                     onClick={openFullRoute}
-                    className="text-xs bg-yellow-400 text-white px-3 py-1 rounded hover:bg-yellow-500 transition flex items-center gap-1"
+                    className="text-xs bg-yellow-400 text-gray-800 px-3 py-1 rounded hover:bg-yellow-500 transition flex items-center gap-1 font-medium uppercase tracking-wide"
                   >
                     <Navigation className="w-3 h-3" />
                     Show Route
@@ -267,15 +267,15 @@ export default function DriverDashboard() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="bg-white rounded-lg border border-gray-200 p-4 text-center">
-            <div className="text-2xl font-light text-gray-800">{totalStops}</div>
+            <div className="text-2xl font-serif font-light text-gray-800">{totalStops}</div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">Total Stops</div>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4 text-center">
-            <div className="text-2xl font-light text-gray-800">{completedStops}/{totalStops}</div>
+            <div className="text-2xl font-serif font-light text-gray-800">{completedStops}/{totalStops}</div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">Complete</div>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4 text-center">
-            <div className="text-2xl font-light text-yellow-500">${totalEarnings.toFixed(2)}</div>
+            <div className="text-2xl font-serif font-light text-gray-800">${totalEarnings.toFixed(2)}</div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">Total Earnings</div>
             <div className="text-xs text-gray-400 mt-2">
               Fees: ${deliveryFees.toFixed(2)} | Tips: ${tips.toFixed(2)}
@@ -290,7 +290,7 @@ export default function DriverDashboard() {
               <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">Route Map</h3>
               <button
                 onClick={openFullRoute}
-                className="text-xs text-yellow-600 hover:text-yellow-700 font-medium flex items-center gap-1"
+                className="text-xs text-yellow-600 hover:text-yellow-700 font-medium flex items-center gap-1 uppercase tracking-wide"
               >
                 <Navigation className="w-3 h-3" />
                 Open in Maps
@@ -501,10 +501,10 @@ export default function DriverDashboard() {
                       )}
                       <button
                         onClick={() => openNavigation(stop.address || stop.warehouse?.address)}
-                        className={`flex items-center justify-center py-3 bg-yellow-400 text-white rounded-lg hover:bg-yellow-500 transition ${!stop.booking?.customer_phone ? 'col-span-2' : ''}`}
+                        className={`flex items-center justify-center py-3 bg-yellow-400 text-gray-800 rounded-lg hover:bg-yellow-500 transition ${!stop.booking?.customer_phone ? 'col-span-2' : ''}`}
                       >
                         <Navigation className="w-4 h-4 mr-2" />
-                        <span className="text-sm font-medium">Navigate</span>
+                        <span className="text-sm font-medium uppercase tracking-wide">Navigate</span>
                       </button>
                     </div>
 
@@ -534,13 +534,13 @@ export default function DriverDashboard() {
 
         {/* Route complete message */}
         {completedStops === totalStops && totalStops > 0 && (
-          <div className="bg-yellow-400 text-white rounded-lg p-6 mt-6 text-center">
+          <div className="bg-yellow-400 text-gray-800 rounded-lg p-6 mt-6 text-center">
             <h3 className="font-serif text-2xl font-light mb-2">
               Route Complete!
             </h3>
-            <p className="mb-4">All stops finished for today</p>
-            <div className="text-3xl font-light mb-2">${totalEarnings}</div>
-            <p className="text-sm opacity-90">Total Earnings Today</p>
+            <p className="mb-4 text-gray-700">All stops finished for today</p>
+            <div className="text-3xl font-serif font-light mb-2">${totalEarnings}</div>
+            <p className="text-sm text-gray-700 uppercase tracking-wide">Total Earnings Today</p>
           </div>
         )}
       </div>

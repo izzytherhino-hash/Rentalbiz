@@ -219,7 +219,7 @@ export default function CustomerBooking() {
             {[1, 2, 3, 4].map((s, idx) => (
               <div key={s} className="flex items-center flex-1">
                 <div className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 transition-all ${
-                  step >= s ? 'border-yellow-400 bg-yellow-400 text-white' : 'border-gray-300 bg-white text-gray-400'
+                  step >= s ? 'border-yellow-400 bg-yellow-400 text-gray-800' : 'border-gray-300 bg-white text-gray-400'
                 }`}>
                   <span className="text-xs sm:text-sm font-medium">{s}</span>
                 </div>
@@ -283,7 +283,7 @@ export default function CustomerBooking() {
                 <button
                   onClick={() => setStep(2)}
                   disabled={!canProceedFromDates}
-                  className="w-full bg-yellow-400 text-white py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+                  className="w-full bg-yellow-400 text-gray-800 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
                 >
                   Continue
                 </button>
@@ -417,7 +417,7 @@ export default function CustomerBooking() {
                   <button
                     onClick={handleShowItems}
                     disabled={loading}
-                    className="flex-1 bg-yellow-400 text-white py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 transition"
+                    className="flex-1 bg-yellow-400 text-gray-800 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 transition"
                   >
                     {loading ? 'Loading...' : 'Show Items'}
                   </button>
@@ -445,7 +445,7 @@ export default function CustomerBooking() {
                     <p className="text-gray-600 mb-6">No items match your party setup.</p>
                     <button
                       onClick={() => setStep(2)}
-                      className="bg-yellow-400 text-white px-8 py-3 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 transition"
+                      className="bg-yellow-400 text-gray-800 px-8 py-3 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 transition"
                     >
                       Adjust Details
                     </button>
@@ -482,7 +482,10 @@ export default function CustomerBooking() {
                               <div className="flex-1">
                                 <h3 className="font-medium text-gray-800 mb-1">{item.name}</h3>
                                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">{item.category}</p>
-                                <p className="text-xl font-light text-gray-800">${item.base_price}</p>
+                                {item.description && (
+                                  <p className="text-sm text-gray-600 mb-3 leading-relaxed">{item.description}</p>
+                                )}
+                                <p className="text-xl font-light text-gray-800">${item.base_price}<span className="text-sm text-gray-500 ml-1">/ day</span></p>
                               </div>
                               {selectedItems.includes(item.inventory_item_id) && (
                                 <CheckCircle className="w-5 h-5 text-yellow-400" />
@@ -522,7 +525,7 @@ export default function CustomerBooking() {
                       <button
                         onClick={() => setStep(4)}
                         disabled={selectedItems.length === 0}
-                        className="flex-1 bg-yellow-400 text-white py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+                        className="flex-1 bg-yellow-400 text-gray-800 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
                       >
                         Checkout
                       </button>
@@ -606,7 +609,7 @@ export default function CustomerBooking() {
                   <button
                     onClick={handleCreateBooking}
                     disabled={!customerInfo.name || !customerInfo.email || !customerInfo.phone || !customerInfo.address || loading}
-                    className="flex-1 bg-yellow-400 text-white py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+                    className="flex-1 bg-yellow-400 text-gray-800 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
                   >
                     {loading ? 'Processing...' : 'Complete Booking'}
                   </button>
@@ -618,7 +621,7 @@ export default function CustomerBooking() {
             {step === 5 && bookingConfirmation && (
               <div className="text-center py-8 sm:py-12">
                 <div className="w-14 h-14 sm:w-16 sm:h-16 bg-yellow-400 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
-                  <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                  <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-gray-800" />
                 </div>
                 <h2 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-light text-gray-800 mb-3 sm:mb-4">
                   You're All Set!
@@ -662,7 +665,7 @@ export default function CustomerBooking() {
                     setBookingConfirmation(null)
                     setError(null)
                   }}
-                  className="bg-yellow-400 text-white px-10 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 transition"
+                  className="bg-yellow-400 text-gray-800 px-10 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 transition"
                 >
                   Book Another Party
                 </button>

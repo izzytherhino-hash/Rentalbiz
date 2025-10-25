@@ -174,7 +174,10 @@ class InventoryItem(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     category: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)  # Full description for website
     base_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)  # URL to item photo
+    website_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)  # Show on customer site
     requires_power: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     min_space_sqft: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Note: SQLite doesn't support ARRAY, we'll store as JSON string or use PostgreSQL
@@ -218,6 +221,13 @@ class Driver(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     total_deliveries: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_earnings: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"), nullable=False)
+
+    # Performance metrics
+    on_time_deliveries: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    late_deliveries: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    avg_rating: Mapped[Decimal | None] = mapped_column(Numeric(3, 2), nullable=True)  # 0.00 to 5.00
+    total_ratings: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )

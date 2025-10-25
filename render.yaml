@@ -7,6 +7,7 @@ services:
     plan: free
     buildCommand: cd backend && pip install -r requirements.txt
     startCommand: cd backend/src && uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
@@ -21,7 +22,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: FRONTEND_URL
-        sync: false
+        value: https://partay-frontend.onrender.com
       - key: GOOGLE_MAPS_API_KEY
         sync: false
       - key: STRIPE_SECRET_KEY
@@ -32,6 +33,18 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+
+  # Frontend Static Site
+  - type: web
+    name: partay-frontend
+    runtime: static
+    region: oregon
+    plan: free
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://partay-backend.onrender.com
 
 databases:
   - name: partay-db

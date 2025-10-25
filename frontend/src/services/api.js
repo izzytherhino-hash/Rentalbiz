@@ -137,6 +137,16 @@ export const bookingAPI = {
 // Inventory API
 export const inventoryAPI = {
   /**
+   * Create a new inventory item.
+   */
+  createItem: async (itemData) => {
+    return apiFetch('/api/inventory/', {
+      method: 'POST',
+      body: JSON.stringify(itemData),
+    });
+  },
+
+  /**
    * List all inventory items.
    */
   listItems: async (filters = {}) => {
@@ -178,6 +188,39 @@ export const inventoryAPI = {
       method: 'PATCH',
       body: JSON.stringify(updateData),
     });
+  },
+
+  /**
+   * Delete inventory item.
+   */
+  deleteItem: async (itemId) => {
+    return apiFetch(`/api/inventory/${itemId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /**
+   * Upload an image for an inventory item.
+   */
+  uploadImage: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const url = `${API_BASE_URL}/api/inventory/upload-image`;
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      // Don't set Content-Type header - browser will set it with boundary
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({
+        detail: `HTTP error ${response.status}`,
+      }));
+      throw new Error(error.detail || `Upload failed with status ${response.status}`);
+    }
+
+    return await response.json();
   },
 };
 

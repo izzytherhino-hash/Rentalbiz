@@ -10,7 +10,8 @@ Creates:
 from decimal import Decimal
 from sqlalchemy.orm import Session
 
-from backend.database.connection import SessionLocal
+from backend.database.connection import SessionLocal, engine
+from backend.database import Base
 from backend.database.models import (
     Warehouse,
     Driver,
@@ -463,6 +464,10 @@ def seed_database() -> None:
     - 5 customers
     - 5 bookings with various statuses (completed, active, upcoming, pending)
     """
+    # Create tables first
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables created/verified")
+
     db = SessionLocal()
     try:
         print("🌱 Starting database seeding...")

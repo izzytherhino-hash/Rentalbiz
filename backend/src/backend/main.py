@@ -10,7 +10,9 @@ Provides REST API for:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from backend.config import get_settings
 from backend.database import Base, engine
@@ -104,6 +106,7 @@ from backend.api.admin import router as admin_router
 from backend.api.inventory import router as inventory_router
 from backend.api.customers import router as customers_router
 from backend.api.chatbot import router as chatbot_router
+from backend.api.routes import router as routes_router
 
 app.include_router(bookings_router, prefix="/api/bookings", tags=["Bookings"])
 app.include_router(drivers_router, prefix="/api/drivers", tags=["Drivers"])
@@ -111,6 +114,12 @@ app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
 app.include_router(inventory_router, prefix="/api/inventory", tags=["Inventory"])
 app.include_router(customers_router, prefix="/api/customers", tags=["Customers"])
 app.include_router(chatbot_router, prefix="/api/admin/chatbot", tags=["Chatbot"])
+app.include_router(routes_router, prefix="/api/routes", tags=["Routes"])
+
+# Mount static files for uploads
+uploads_dir = Path(__file__).parent.parent.parent / "uploads"
+uploads_dir.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 
 if __name__ == "__main__":
