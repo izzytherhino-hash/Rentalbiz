@@ -245,8 +245,11 @@ Please answer the user's question based on the provided database context."""
 
     try:
         # Call Claude API
+        # Allow model override via env var, default to stable Claude 3.5 Sonnet
+        model = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20240620")
+
         response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
+            model=model,
             max_tokens=1024,
             system=create_system_prompt(),
             messages=messages,
