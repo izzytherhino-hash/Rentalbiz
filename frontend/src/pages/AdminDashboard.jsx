@@ -104,6 +104,25 @@ export default function AdminDashboard() {
     b.delivery_date === selectedDate || b.pickup_date === selectedDate
   )
 
+  // Helper function to determine if booking is delivery or pickup for given date
+  const getBookingEventType = (booking, dateStr) => {
+    if (booking.delivery_date === dateStr) return 'delivery'
+    if (booking.pickup_date === dateStr) return 'pickup'
+    return null
+  }
+
+  // Get color based on event type (delivery or pickup)
+  const getEventTypeColor = (booking, dateStr) => {
+    const eventType = getBookingEventType(booking, dateStr)
+    if (eventType === 'delivery') {
+      return 'bg-green-100 border-green-400 text-green-800'
+    }
+    if (eventType === 'pickup') {
+      return 'bg-blue-100 border-blue-400 text-blue-800'
+    }
+    return 'bg-white border-gray-200 text-gray-800'
+  }
+
   const getStatusColor = (status) => {
     const colors = {
       'pending': 'bg-gray-100 text-gray-800 border-gray-300',
@@ -462,6 +481,18 @@ export default function AdminDashboard() {
                 />
               </div>
 
+              {/* Color Legend */}
+              <div className="flex items-center gap-4 mb-4 text-xs">
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-green-100 border border-green-400"></div>
+                  <span className="text-gray-600">Delivery</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded bg-blue-100 border border-blue-400"></div>
+                  <span className="text-gray-600">Pickup</span>
+                </div>
+              </div>
+
               <div className="grid grid-cols-7 gap-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                   <div key={day} className="text-center text-xs font-medium text-gray-500 py-2">
@@ -496,7 +527,7 @@ export default function AdminDashboard() {
                             {day.bookings.slice(0, 2).map(booking => (
                               <div
                                 key={booking.booking_id}
-                                className="text-xs bg-white border border-gray-200 rounded px-1 py-0.5 truncate"
+                                className={`text-xs border rounded px-1 py-0.5 truncate ${getEventTypeColor(booking, day.dateStr)}`}
                               >
                                 {booking.customer?.name?.split(' ')[0] || 'N/A'}
                               </div>
@@ -529,25 +560,39 @@ export default function AdminDashboard() {
                 <p className="text-gray-500 text-sm">No bookings for this day</p>
               ) : (
                 <div className="space-y-3">
-                  {selectedDayBookings.map(booking => (
-                    <div
-                      key={booking.booking_id}
-                      onClick={() => setSelectedBooking(booking)}
-                      className="border border-gray-200 rounded-lg p-3 hover:border-yellow-400 transition cursor-pointer"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-800 text-sm mb-1">
-                            {booking.customer?.name || 'N/A'}
+                  {selectedDayBookings.map(booking => {
+                    const eventType = getBookingEventType(booking, selectedDate)
+                    return (
+                      <div
+                        key={booking.booking_id}
+                        onClick={() => setSelectedBooking(booking)}
+                        className="border border-gray-200 rounded-lg p-3 hover:border-yellow-400 transition cursor-pointer"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-800 text-sm mb-1">
+                              {booking.customer?.name || 'N/A'}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs text-gray-500">
+                                {booking.order_number}
+                              </div>
+                              {eventType === 'delivery' && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 border border-green-400">
+                                  Delivery
+                                </span>
+                              )}
+                              {eventType === 'pickup' && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-400">
+                                  Pickup
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-500">
-                            {booking.order_number}
-                          </div>
+                          <span className={`text-xs px-2 py-1 rounded border ${getStatusColor(booking.status)}`}>
+                            {getStatusLabel(booking.status)}
+                          </span>
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded border ${getStatusColor(booking.status)}`}>
-                          {getStatusLabel(booking.status)}
-                        </span>
-                      </div>
 
                       <div className="text-xs text-gray-600 mb-2">
                         ${booking.total_amount}
@@ -565,7 +610,8 @@ export default function AdminDashboard() {
                         </div>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
