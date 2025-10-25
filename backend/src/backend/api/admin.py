@@ -446,3 +446,79 @@ async def seed_database(db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error seeding database: {str(e)}"
         )
+
+
+@router.post("/update-driver-performance")
+async def update_driver_performance(db: Session = Depends(get_db)):
+    """
+    Update existing drivers with performance metrics.
+
+    This endpoint adds realistic performance data to existing drivers
+    for testing and demonstration purposes.
+
+    Returns:
+        Success message with updated driver stats
+
+    Example:
+        POST /api/admin/update-driver-performance
+    """
+    from decimal import Decimal
+
+    try:
+        # Update Mike Johnson - top performer
+        mike = db.query(Driver).filter(Driver.name == "Mike Johnson").first()
+        if mike:
+            mike.total_deliveries = 47
+            mike.total_earnings = Decimal("3525.00")
+            mike.on_time_deliveries = 44
+            mike.late_deliveries = 3
+            mike.avg_rating = Decimal("4.8")
+            mike.total_ratings = 42
+
+        # Update Sarah Chen - consistent performer
+        sarah = db.query(Driver).filter(Driver.name == "Sarah Chen").first()
+        if sarah:
+            sarah.total_deliveries = 38
+            sarah.total_earnings = Decimal("2850.00")
+            sarah.on_time_deliveries = 35
+            sarah.late_deliveries = 3
+            sarah.avg_rating = Decimal("4.6")
+            sarah.total_ratings = 35
+
+        # Update James Rodriguez - newer driver
+        james = db.query(Driver).filter(Driver.name == "James Rodriguez").first()
+        if james:
+            james.total_deliveries = 23
+            james.total_earnings = Decimal("1725.00")
+            james.on_time_deliveries = 20
+            james.late_deliveries = 3
+            james.avg_rating = Decimal("4.5")
+            james.total_ratings = 20
+
+        db.commit()
+
+        # Get updated counts
+        drivers = db.query(Driver).all()
+        driver_stats = []
+        for d in drivers:
+            on_time_pct = round((d.on_time_deliveries / (d.on_time_deliveries + d.late_deliveries)) * 100) if (d.on_time_deliveries + d.late_deliveries) > 0 else 0
+            driver_stats.append({
+                "name": d.name,
+                "total_deliveries": d.total_deliveries,
+                "avg_rating": float(d.avg_rating) if d.avg_rating else 0.0,
+                "total_ratings": d.total_ratings,
+                "on_time_percentage": on_time_pct
+            })
+
+        return {
+            "success": True,
+            "message": "Driver performance metrics updated successfully",
+            "drivers": driver_stats
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating driver performance: {str(e)}"
+        )
