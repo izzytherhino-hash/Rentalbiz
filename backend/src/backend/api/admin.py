@@ -365,6 +365,16 @@ async def migrate_schema(db: Session = Depends(get_db)):
             ALTER TABLE drivers
             ADD COLUMN IF NOT EXISTS late_deliveries INTEGER DEFAULT 0
             """,
+            # Add avg_rating to drivers
+            """
+            ALTER TABLE drivers
+            ADD COLUMN IF NOT EXISTS avg_rating DECIMAL(3,2) DEFAULT 0.0
+            """,
+            # Add total_ratings to drivers
+            """
+            ALTER TABLE drivers
+            ADD COLUMN IF NOT EXISTS total_ratings INTEGER DEFAULT 0
+            """,
         ]
 
         # Execute each migration
