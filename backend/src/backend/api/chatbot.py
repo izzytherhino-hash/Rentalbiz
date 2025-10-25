@@ -246,7 +246,7 @@ Please answer the user's question based on the provided database context."""
     try:
         # Call Claude API
         response = client.messages.create(
-            model="claude-3-sonnet-20240229",
+            model="claude-3-5-sonnet-20241022",
             max_tokens=1024,
             system=create_system_prompt(),
             messages=messages,
