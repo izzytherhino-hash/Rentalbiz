@@ -310,3 +310,48 @@ async def get_drivers_workload(db: Session = Depends(get_db)):
         })
 
     return {"drivers": workload}
+
+
+@router.post("/seed-database")
+async def seed_database(db: Session = Depends(get_db)):
+    """
+    Seed the database with initial sample data.
+
+    WARNING: This will only work on empty databases. Use with caution in production.
+
+    Returns:
+        dict: Summary of seeded data
+    """
+    from backend.database.seed import seed_database as run_seed
+
+    # Check if database is already seeded
+    existing_items = db.query(InventoryItem).count()
+    if existing_items > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Database already contains {existing_items} items. Cannot seed."
+        )
+
+    try:
+        # Run the seed function
+        run_seed()
+
+        # Get counts
+        item_count = db.query(InventoryItem).count()
+        driver_count = db.query(Driver).count()
+        booking_count = db.query(Booking).count()
+
+        return {
+            "success": True,
+            "message": "Database seeded successfully",
+            "summary": {
+                "inventory_items": item_count,
+                "drivers": driver_count,
+                "bookings": booking_count
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error seeding database: {str(e)}"
+        )
