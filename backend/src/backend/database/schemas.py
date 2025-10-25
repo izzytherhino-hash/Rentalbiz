@@ -167,20 +167,38 @@ class InventoryItem(InventoryItemBase):
     @classmethod
     def convert_allowed_surfaces(cls, data: Any) -> Any:
         """Convert allowed_surfaces from comma-separated string to list."""
+        # Handle dictionary input
         if isinstance(data, dict):
             allowed_surfaces = data.get("allowed_surfaces")
-            if isinstance(allowed_surfaces, str):
+            if isinstance(allowed_surfaces, str) and allowed_surfaces:
+                data = data.copy()  # Don't mutate original
                 data["allowed_surfaces"] = [s.strip() for s in allowed_surfaces.split(",") if s.strip()]
-        else:
-            # Handle SQLAlchemy model objects
-            if hasattr(data, "allowed_surfaces"):
-                allowed_surfaces = getattr(data, "allowed_surfaces")
-                if isinstance(allowed_surfaces, str):
-                    # Convert model to dict using model_dump if available, otherwise use __dict__
-                    if hasattr(data, "__dict__"):
-                        data_dict = {k: v for k, v in data.__dict__.items() if not k.startswith("_")}
-                        data_dict["allowed_surfaces"] = [s.strip() for s in allowed_surfaces.split(",") if s.strip()]
-                        return data_dict
+            elif allowed_surfaces == "":
+                data = data.copy()
+                data["allowed_surfaces"] = []
+            return data
+
+        # Handle SQLAlchemy model objects - convert to dict first
+        try:
+            # Try to get __dict__ and filter out SQLAlchemy internal attributes
+            if hasattr(data, "__dict__"):
+                data_dict = {}
+                for key, value in data.__dict__.items():
+                    if not key.startswith("_"):
+                        data_dict[key] = value
+
+                # Now handle allowed_surfaces in the dict
+                allowed_surfaces = data_dict.get("allowed_surfaces")
+                if isinstance(allowed_surfaces, str) and allowed_surfaces:
+                    data_dict["allowed_surfaces"] = [s.strip() for s in allowed_surfaces.split(",") if s.strip()]
+                elif allowed_surfaces == "":
+                    data_dict["allowed_surfaces"] = []
+
+                return data_dict
+        except Exception:
+            # If anything fails, just return the original data and let Pydantic handle it
+            pass
+
         return data
 
 
