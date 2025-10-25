@@ -3,6 +3,13 @@ import { Package, Truck, MapPin, DollarSign, AlertCircle, Clock, Search, Plus, F
 import { adminAPI, inventoryAPI, driverAPI } from '../services/api'
 import Chatbot from '../components/Chatbot'
 import InventoryModal from '../components/InventoryModal'
+import {
+  generateCalendarDays,
+  getBookingsForDate,
+  getBookingEventType,
+  getEventTypeColor
+} from './AdminDashboard/utils/calendarHelpers'
+import { getStatusColor, getStatusLabel } from './AdminDashboard/utils/statusHelpers'
 
 export default function AdminDashboard() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
@@ -74,82 +81,9 @@ export default function AdminDashboard() {
     }
   }
 
-  const generateCalendarDays = () => {
-    const days = []
-    const [year, month] = selectedDate.split('-').map(Number)
-
-    const firstDay = new Date(year, month - 1, 1)
-    const lastDay = new Date(year, month, 0)
-    const startDay = firstDay.getDay()
-
-    // Add empty cells for days before the first of the month
-    for (let i = 0; i < startDay; i++) {
-      days.push(null)
-    }
-
-    // Add all days of the month
-    for (let day = 1; day <= lastDay.getDate(); day++) {
-      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-      const dayBookings = bookings.filter(b =>
-        b.delivery_date === dateStr || b.pickup_date === dateStr
-      )
-      days.push({ date: day, dateStr: dateStr, bookings: dayBookings })
-    }
-
-    return days
-  }
-
-  const calendarDays = generateCalendarDays()
-  const selectedDayBookings = bookings.filter(b =>
-    b.delivery_date === selectedDate || b.pickup_date === selectedDate
-  )
-
-  // Helper function to determine if booking is delivery or pickup for given date
-  const getBookingEventType = (booking, dateStr) => {
-    if (booking.delivery_date === dateStr) return 'delivery'
-    if (booking.pickup_date === dateStr) return 'pickup'
-    return null
-  }
-
-  // Get color based on event type (delivery or pickup)
-  const getEventTypeColor = (booking, dateStr) => {
-    const eventType = getBookingEventType(booking, dateStr)
-    if (eventType === 'delivery') {
-      return 'bg-green-100 border-green-400 text-green-800'
-    }
-    if (eventType === 'pickup') {
-      return 'bg-blue-100 border-blue-400 text-blue-800'
-    }
-    return 'bg-white border-gray-200 text-gray-800'
-  }
-
-  const getStatusColor = (status) => {
-    const colors = {
-      'pending': 'bg-gray-100 text-gray-800 border-gray-300',
-      'confirmed': 'bg-blue-100 text-blue-800 border-blue-300',
-      'out_for_delivery': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      'delivered': 'bg-green-100 text-green-800 border-green-300',
-      'active': 'bg-green-100 text-green-800 border-green-300',
-      'picked_up': 'bg-purple-100 text-purple-800 border-purple-300',
-      'completed': 'bg-gray-100 text-gray-800 border-gray-300',
-      'cancelled': 'bg-red-100 text-red-800 border-red-300'
-    }
-    return colors[status] || 'bg-gray-100 text-gray-800 border-gray-300'
-  }
-
-  const getStatusLabel = (status) => {
-    const labels = {
-      'pending': 'Pending',
-      'confirmed': 'Confirmed',
-      'out_for_delivery': 'Out for Delivery',
-      'delivered': 'Delivered',
-      'active': 'Active Rental',
-      'picked_up': 'Picked Up',
-      'completed': 'Completed',
-      'cancelled': 'Cancelled'
-    }
-    return labels[status] || status
-  }
+  // Use imported utility functions
+  const calendarDays = generateCalendarDays(selectedDate, bookings)
+  const selectedDayBookings = getBookingsForDate(bookings, selectedDate)
 
   const handleAssignDriver = async (bookingId, driverId) => {
     setAssigningDriver(true)
