@@ -393,6 +393,7 @@ def seed_bookings(
     # Get inventory items for bookings
     items = db.query(InventoryItem).all()
     bounce_house = next((i for i in items if "Bounce House Castle" in i.name), None)
+    mini_bounce = next((i for i in items if "Mini Bounce House" in i.name), None)
     water_slide = next((i for i in items if "Water Slide" in i.name), None)
     cotton_candy = next((i for i in items if "Cotton Candy" in i.name), None)
     popcorn = next((i for i in items if "Popcorn" in i.name), None)
