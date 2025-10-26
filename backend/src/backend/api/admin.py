@@ -539,6 +539,59 @@ async def seed_database(db: Session = Depends(get_db)):
         )
 
 
+@router.post("/reseed-bookings")
+async def reseed_bookings(db: Session = Depends(get_db)):
+    """
+    Reseed all bookings with updated data.
+
+    Deletes all existing bookings and reseeds with latest booking data (15 bookings).
+    Useful for updating production with new seed data.
+
+    WARNING: This will delete all existing bookings!
+
+    Returns:
+        dict: Summary of reseeded bookings
+    """
+    from backend.database.seed import seed_bookings
+    from backend.database.models import Customer, InventoryItem, Driver, Warehouse
+
+    try:
+        # Get current booking count
+        old_booking_count = db.query(Booking).count()
+
+        # Delete all existing bookings and booking items
+        from backend.database.models import BookingItem
+        db.query(BookingItem).delete()
+        db.query(Booking).delete()
+        db.commit()
+        print(f"🗑️  Deleted {old_booking_count} existing bookings")
+
+        # Get existing data
+        customers = {c.name: c.customer_id for c in db.query(Customer).all()}
+        drivers = {d.name: d.driver_id for d in db.query(Driver).all()}
+        warehouses = {w.name: w.warehouse_id for w in db.query(Warehouse).all()}
+
+        # Reseed bookings
+        seed_bookings(db, customers, drivers, warehouses)
+        db.commit()
+
+        # Get new count
+        new_booking_count = db.query(Booking).count()
+
+        return {
+            "success": True,
+            "message": f"Reseeded bookings successfully",
+            "old_bookings": old_booking_count,
+            "new_bookings": new_booking_count
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error reseeding bookings: {str(e)}"
+        )
+
+
 @router.post("/seed-inventory-photos")
 async def seed_inventory_photos(
     clear_existing: bool = False,
