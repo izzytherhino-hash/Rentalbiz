@@ -107,12 +107,14 @@ from backend.api.inventory import router as inventory_router
 from backend.api.customers import router as customers_router
 from backend.api.chatbot import router as chatbot_router
 from backend.api.routes import router as routes_router
+from backend.api.warehouses import router as warehouses_router
 
 app.include_router(bookings_router, prefix="/api/bookings", tags=["Bookings"])
 app.include_router(drivers_router, prefix="/api/drivers", tags=["Drivers"])
 app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
 app.include_router(inventory_router, prefix="/api/inventory", tags=["Inventory"])
 app.include_router(customers_router, prefix="/api/customers", tags=["Customers"])
+app.include_router(warehouses_router, prefix="/api/warehouses", tags=["Warehouses"])
 app.include_router(chatbot_router, prefix="/api/admin/chatbot", tags=["Chatbot"])
 app.include_router(routes_router, prefix="/api/routes", tags=["Routes"])
 
