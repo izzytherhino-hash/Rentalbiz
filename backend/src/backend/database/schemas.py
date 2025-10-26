@@ -180,26 +180,22 @@ class InventoryItem(InventoryItemBase):
             return data
 
         # Handle SQLAlchemy model objects - convert to dict first
-        try:
-            # Try to get __dict__ and filter out SQLAlchemy internal attributes
-            if hasattr(data, "__dict__"):
-                data_dict = {}
-                for key, value in data.__dict__.items():
-                    if not key.startswith("_"):
-                        data_dict[key] = value
+        if hasattr(data, "__dict__"):
+            data_dict = {}
+            for key, value in data.__dict__.items():
+                if not key.startswith("_"):
+                    data_dict[key] = value
 
-                # Now handle allowed_surfaces in the dict
-                allowed_surfaces = data_dict.get("allowed_surfaces")
-                if isinstance(allowed_surfaces, str) and allowed_surfaces:
-                    data_dict["allowed_surfaces"] = [s.strip() for s in allowed_surfaces.split(",") if s.strip()]
-                elif allowed_surfaces == "":
-                    data_dict["allowed_surfaces"] = []
+            # Now handle allowed_surfaces in the dict
+            allowed_surfaces = data_dict.get("allowed_surfaces")
+            if isinstance(allowed_surfaces, str) and allowed_surfaces:
+                data_dict["allowed_surfaces"] = [s.strip() for s in allowed_surfaces.split(",") if s.strip()]
+            elif allowed_surfaces == "":
+                data_dict["allowed_surfaces"] = []
 
-                return data_dict
-        except Exception:
-            # If anything fails, just return the original data and let Pydantic handle it
-            pass
+            return data_dict
 
+        # If we couldn't handle it, return as dict
         return data
 
 
