@@ -33,6 +33,8 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: PYTHONPATH
+        value: /opt/render/project/src/backend/src
 
   # Frontend Static Site
   - type: web
