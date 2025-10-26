@@ -592,6 +592,12 @@ async def clear_and_reseed(db: Session = Depends(get_db)):
         run_seed()
         print("✅ Database reseeded successfully")
 
+        # Seed inventory photos
+        print("📸 Seeding inventory photos...")
+        from backend.database.seed import seed_inventory_photos
+        photos_created = seed_inventory_photos(db, clear_existing=False)  # Photos already cleared
+        print(f"✅ Seeded {photos_created} inventory photos")
+
         # Get counts after seeding
         new_counts = {
             "warehouses": db.query(Warehouse).count(),
@@ -599,11 +605,12 @@ async def clear_and_reseed(db: Session = Depends(get_db)):
             "drivers": db.query(Driver).count(),
             "customers": db.query(Customer).count(),
             "bookings": db.query(Booking).count(),
+            "photos": db.query(InventoryPhoto).count(),
         }
 
         return {
             "success": True,
-            "message": "Database cleared and reseeded successfully",
+            "message": "Database cleared and reseeded successfully (including photos)",
             "old_counts": old_counts,
             "new_counts": new_counts
         }
