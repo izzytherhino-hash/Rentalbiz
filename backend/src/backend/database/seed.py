@@ -520,7 +520,7 @@ def seed_bookings(
         },
         # Booking 6: Out for delivery today
         {
-            "customer_id": customer_ids["Robert Taylor"],
+            "customer_id": customer_ids["Emily Martinez"],
             "delivery_date": today,
             "pickup_date": today + timedelta(days=2),
             "delivery_time_window": "1:00 PM - 3:00 PM",
@@ -669,7 +669,7 @@ def seed_bookings(
         },
         # Booking 13: Next week Monday
         {
-            "customer_id": customer_ids["Robert Taylor"],
+            "customer_id": customer_ids["Emily Martinez"],
             "delivery_date": today + timedelta(days=7),
             "pickup_date": today + timedelta(days=9),
             "delivery_time_window": "10:00 AM - 12:00 PM",
