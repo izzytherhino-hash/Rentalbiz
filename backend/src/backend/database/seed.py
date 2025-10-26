@@ -263,31 +263,39 @@ def seed_inventory_photos(db: Session) -> None:
     # While better matched than before, they still don't show actual rental equipment.
     # Use these only for development/demo - replace before production!
     photo_data_map = {
-        # All items use verified working Unsplash photos
-        # NOTE: These are generic party/food images, not actual rental equipment
+        # High-quality Unsplash photos for party rental equipment
+        # NOTE: These are curated stock photos - replace with actual equipment photos for production
         "Bounce House Castle": [
-            {"url": "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1464207687429-7505649dae38?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
         ],
         "Water Slide Mega": [
-            {"url": "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
         ],
         "Obstacle Course": [
-            {"url": "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1526566661780-1a67ea3c863e?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
         ],
         "Mini Bounce House": [
-            {"url": "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1515041219749-89347f83291a?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1464207687429-7505649dae38?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
         ],
         "Cotton Candy Machine": [
-            {"url": "https://images.unsplash.com/photo-1582169296194-e4d644c48063?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1582169296194-e4d644c48063?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
         ],
         "Popcorn Machine": [
-            {"url": "https://images.unsplash.com/photo-1585647347483-22b66260dfff?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1585647347483-22b66260dfff?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1578849278619-e73505e9610f?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
         ],
         "Photo Booth Deluxe": [
-            {"url": "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1511578314322-379afb476865?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
         ],
         "Tables & Chairs Set": [
-            {"url": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1478145787956-f6f12c59624d?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
         ],
     }
 
