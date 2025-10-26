@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Package, Truck, MapPin, DollarSign, AlertCircle, Clock, Search, Plus, Filter, Users, Warehouse, CheckCircle, Calendar, X, Edit, Trash2, List, Map, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react'
-import { adminAPI, inventoryAPI, driverAPI } from '../services/api'
+import { adminAPI, inventoryAPI, driverAPI, API_BASE_URL } from '../services/api'
 import Chatbot from '../components/Chatbot'
 import InventoryModal from '../components/InventoryModal'
 import InventoryMap from '../components/InventoryMap'
@@ -365,26 +365,23 @@ export default function AdminDashboard() {
     }
   }
 
-  // Get warehouses from seed data (hardcoded for now)
+  // Fetch warehouses from API
   useEffect(() => {
-    // In production, fetch from an API endpoint
-    // For now, use the warehouses from seed data
-    setWarehouses([
-      {
-        warehouse_id: 'b6b08038-3905-4e59-9454-b42e1041b6e6',
-        name: 'Warehouse A - Main',
-        address: '22 E Dyer Ave, Santa Ana, CA 92707',
-        address_lat: '33.7456',
-        address_lng: '-117.8678'
-      },
-      {
-        warehouse_id: 'd0da53e0-4d75-4868-bffd-2166fee657b0',
-        name: 'Warehouse B - North',
-        address: 'Crystal Cove Shopping Center, Newport Beach, CA 92657',
-        address_lat: '33.5733',
-        address_lng: '-117.8418'
+    const fetchWarehouses = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/warehouses/`)
+        if (response.ok) {
+          const data = await response.json()
+          setWarehouses(data)
+        } else {
+          console.error('Failed to fetch warehouses:', response.statusText)
+        }
+      } catch (error) {
+        console.error('Error fetching warehouses:', error)
       }
-    ])
+    }
+
+    fetchWarehouses()
   }, [])
 
   if (loading && !bookings.length) {
