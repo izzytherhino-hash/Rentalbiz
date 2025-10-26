@@ -556,7 +556,7 @@ async def clear_and_reseed(db: Session = Depends(get_db)):
     Returns:
         dict: Summary of reseeded data
     """
-    from backend.database.seed import run_seed
+    from backend.database.seed import seed_database as run_seed
     from backend.database.models import (
         Customer, InventoryItem, Driver, Warehouse,
         BookingItem, InventoryPhoto, Notification, Payment, InventoryMovement
@@ -589,8 +589,7 @@ async def clear_and_reseed(db: Session = Depends(get_db)):
 
         # Reseed everything fresh
         print("🌱 Reseeding database with fresh data...")
-        run_seed(db)
-        db.commit()
+        run_seed()
         print("✅ Database reseeded successfully")
 
         # Get counts after seeding
