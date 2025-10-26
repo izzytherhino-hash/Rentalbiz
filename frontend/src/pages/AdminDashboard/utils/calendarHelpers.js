@@ -6,6 +6,37 @@
  */
 
 /**
+ * Convert bookings to calendar events.
+ * If a booking has both delivery and pickup on the same date,
+ * it creates two separate event entries.
+ *
+ * Args:
+ *   bookings: Array of booking objects
+ *   dateStr: Date string in YYYY-MM-DD format
+ *
+ * Returns:
+ *   Array of event objects with { booking, eventType }
+ */
+export function getEventsForDate(bookings, dateStr) {
+  const events = []
+
+  bookings.forEach(booking => {
+    // Add delivery event if it matches this date
+    if (booking.delivery_date === dateStr) {
+      events.push({ booking, eventType: 'delivery' })
+    }
+
+    // Add pickup event if it matches this date
+    // (even if delivery is also on this date)
+    if (booking.pickup_date === dateStr) {
+      events.push({ booking, eventType: 'pickup' })
+    }
+  })
+
+  return events
+}
+
+/**
  * Generate calendar days for a given month with associated bookings.
  *
  * Args:
@@ -13,7 +44,7 @@
  *   bookings: Array of booking objects with delivery_date and pickup_date
  *
  * Returns:
- *   Array of day objects with { date, dateStr, bookings } or null for empty cells
+ *   Array of day objects with { date, dateStr, bookings, events } or null for empty cells
  */
 export function generateCalendarDays(selectedDate, bookings) {
   const days = []
@@ -34,7 +65,13 @@ export function generateCalendarDays(selectedDate, bookings) {
     const dayBookings = bookings.filter(b =>
       b.delivery_date === dateStr || b.pickup_date === dateStr
     )
-    days.push({ date: day, dateStr: dateStr, bookings: dayBookings })
+    const dayEvents = getEventsForDate(bookings, dateStr)
+    days.push({
+      date: day,
+      dateStr: dateStr,
+      bookings: dayBookings,
+      events: dayEvents
+    })
   }
 
   return days
@@ -76,14 +113,23 @@ export function getBookingEventType(booking, dateStr) {
  * Get Tailwind CSS classes for event type color coding.
  *
  * Args:
- *   booking: Booking object
- *   dateStr: Date string in YYYY-MM-DD format
+ *   eventType: 'delivery', 'pickup', or null
+ *   OR
+ *   booking: Booking object (legacy support)
+ *   dateStr: Date string in YYYY-MM-DD format (legacy support)
  *
  * Returns:
  *   String of Tailwind CSS classes for background, border, and text color
  */
-export function getEventTypeColor(booking, dateStr) {
-  const eventType = getBookingEventType(booking, dateStr)
+export function getEventTypeColor(eventTypeOrBooking, dateStr) {
+  // Support both new format (eventType string) and legacy format (booking object)
+  let eventType
+  if (typeof eventTypeOrBooking === 'string') {
+    eventType = eventTypeOrBooking
+  } else {
+    eventType = getBookingEventType(eventTypeOrBooking, dateStr)
+  }
+
   if (eventType === 'delivery') {
     return 'bg-green-100 border-green-400 text-green-800'
   }

@@ -312,6 +312,97 @@ async def get_drivers_workload(db: Session = Depends(get_db)):
     return {"drivers": workload}
 
 
+@router.get("/drivers/recommendations/{booking_id}")
+async def get_driver_recommendations(booking_id: str, db: Session = Depends(get_db)):
+    """
+    Get recommended drivers for a booking based on route optimization.
+
+    Analyzes driver routes, proximity, and availability to recommend
+    the best drivers for a specific booking.
+
+    Args:
+        booking_id: Booking UUID
+        db: Database session
+
+    Returns:
+        List of recommended drivers with scores and reasoning
+
+    Example:
+        GET /api/admin/drivers/recommendations/{booking_id}
+        Response: {
+            "booking_id": "...",
+            "recommendations": [
+                {
+                    "driver_id": "...",
+                    "driver_name": "Mike Johnson",
+                    "score": 2.5,
+                    "distance_to_delivery": 1.2,
+                    "route_disruption": 1.8,
+                    "current_stops": 3,
+                    "reason": "Minimal disruption (1.8mi added)"
+                }
+            ]
+        }
+    """
+    from services.route_optimizer import recommend_drivers
+
+    # Get the booking
+    booking = db.query(Booking).filter(Booking.booking_id == booking_id).first()
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking not found"
+        )
+
+    # Get all drivers and bookings for route analysis
+    drivers = db.query(Driver).all()
+    all_bookings = db.query(Booking).all()
+
+    # Convert to dicts for route optimizer
+    drivers_dict = [
+        {
+            "id": d.driver_id,
+            "name": d.name,
+            "is_active": d.is_active
+        }
+        for d in drivers
+    ]
+
+    bookings_dict = [
+        {
+            "id": b.booking_id,
+            "delivery_date": str(b.delivery_date),
+            "pickup_date": str(b.pickup_date),
+            "delivery_address": b.delivery_address,
+            "delivery_driver_id": b.assigned_driver_id,
+            "pickup_driver_id": b.pickup_driver_id
+        }
+        for b in all_bookings
+    ]
+
+    new_booking_dict = {
+        "id": booking.booking_id,
+        "delivery_date": str(booking.delivery_date),
+        "pickup_date": str(booking.pickup_date),
+        "delivery_address": booking.delivery_address
+    }
+
+    # Get recommendations
+    recommendations = recommend_drivers(
+        drivers_dict,
+        bookings_dict,
+        new_booking_dict,
+        max_recommendations=5
+    )
+
+    return {
+        "booking_id": booking_id,
+        "delivery_address": booking.delivery_address,
+        "delivery_date": str(booking.delivery_date),
+        "recommendations": [rec.to_dict() for rec in recommendations]
+    }
+
+
 @router.post("/migrate-schema")
 async def migrate_schema(db: Session = Depends(get_db)):
     """
@@ -445,6 +536,53 @@ async def seed_database(db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error seeding database: {str(e)}"
+        )
+
+
+@router.post("/seed-inventory-photos")
+async def seed_inventory_photos(
+    clear_existing: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Seed inventory photos for existing items.
+
+    Args:
+        clear_existing: If True, delete all existing photos first
+
+    Returns:
+        dict: Summary of seeded photos
+    """
+    from backend.database.seed import seed_inventory_photos as run_seed_photos
+
+    try:
+        # Clear existing photos if requested
+        if clear_existing:
+            from backend.database.models import InventoryPhoto
+            deleted_count = db.query(InventoryPhoto).delete()
+            db.commit()
+            print(f"🗑️  Deleted {deleted_count} existing photos")
+
+        # Run the photo seeding function
+        result = run_seed_photos(db)
+        db.commit()
+
+        # Get photo count
+        from backend.database.models import InventoryPhoto
+        photo_count = db.query(InventoryPhoto).count()
+
+        return {
+            "success": True,
+            "message": "Inventory photos seeded successfully",
+            "photos_created": photo_count,
+            "cleared_old_photos": clear_existing,
+            "details": result
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error seeding photos: {str(e)}"
         )
 
 

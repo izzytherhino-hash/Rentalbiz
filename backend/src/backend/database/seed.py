@@ -17,6 +17,7 @@ from backend.database.models import (
     Warehouse,
     Driver,
     InventoryItem,
+    InventoryPhoto,
     Customer,
     Booking,
     BookingItem,
@@ -37,16 +38,16 @@ def seed_warehouses(db: Session) -> dict[str, str]:
     warehouses_data = [
         {
             "name": "Warehouse A - Main",
-            "address": "1500 Adams Ave, Costa Mesa, CA 92626",
-            "address_lat": Decimal("33.6595"),
-            "address_lng": Decimal("-117.9187"),
+            "address": "22 E Dyer Ave, Santa Ana, CA 92707",
+            "address_lat": Decimal("33.7456"),
+            "address_lng": Decimal("-117.8678"),
             "is_active": True,
         },
         {
             "name": "Warehouse B - North",
-            "address": "2800 Harbor Blvd, Costa Mesa, CA 92626",
-            "address_lat": Decimal("33.6712"),
-            "address_lng": Decimal("-117.9189"),
+            "address": "Crystal Cove Shopping Center, Newport Beach, CA 92657",
+            "address_lat": Decimal("33.5733"),
+            "address_lng": Decimal("-117.8418"),
             "is_active": True,
         },
     ]
@@ -231,6 +232,79 @@ def seed_inventory_items(db: Session, warehouse_ids: dict[str, str]) -> None:
         db.add(item)
 
     print(f"✅ Created {len(items_data)} inventory items")
+
+
+def seed_inventory_photos(db: Session) -> None:
+    """
+    Seed sample photos for inventory items.
+
+    ⚠️  IMPORTANT: These are TEMPORARY placeholder images for development/demo purposes.
+
+    Current images are party-themed stock photos from Unsplash that DO NOT show
+    actual party rental equipment. For production use, you must:
+
+    1. Replace with professional photos of your actual inventory items
+    2. Upload via the photo management API endpoints already implemented
+    3. Ensure proper licensing/permissions for all images used
+
+    Note: Supplier images (Magic Jump, etc.) require customer accounts and cannot
+    be programmatically accessed. You'll need to either:
+    - Take photos of your own equipment
+    - Purchase/license images from suppliers you work with
+    - Manually download from your supplier account and upload via API
+    """
+    # Get all inventory items
+    items = db.query(InventoryItem).all()
+
+    # ========================================================================
+    # ⚠️  TEMPORARY PLACEHOLDER IMAGES - REPLACE WITH ACTUAL EQUIPMENT PHOTOS
+    # ========================================================================
+    # These are curated stock photos from Unsplash that relate to each category.
+    # While better matched than before, they still don't show actual rental equipment.
+    # Use these only for development/demo - replace before production!
+    photo_data_map = {
+        # All items use verified working Unsplash photos
+        # NOTE: These are generic party/food images, not actual rental equipment
+        "Bounce House Castle": [
+            {"url": "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+        ],
+        "Water Slide Mega": [
+            {"url": "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+        ],
+        "Obstacle Course": [
+            {"url": "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+        ],
+        "Mini Bounce House": [
+            {"url": "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+        ],
+        "Cotton Candy Machine": [
+            {"url": "https://images.unsplash.com/photo-1582169296194-e4d644c48063?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+        ],
+        "Popcorn Machine": [
+            {"url": "https://images.unsplash.com/photo-1585647347483-22b66260dfff?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+        ],
+        "Photo Booth Deluxe": [
+            {"url": "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+        ],
+        "Tables & Chairs Set": [
+            {"url": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=800&h=600&fit=crop&q=80", "order": 0, "thumbnail": True},
+        ],
+    }
+
+    total_photos = 0
+    for item in items:
+        if item.name in photo_data_map:
+            for photo_info in photo_data_map[item.name]:
+                photo = InventoryPhoto(
+                    inventory_item_id=item.inventory_item_id,
+                    image_url=photo_info["url"],
+                    display_order=photo_info["order"],
+                    is_thumbnail=photo_info["thumbnail"]
+                )
+                db.add(photo)
+                total_photos += 1
+
+    print(f"✅ Created {total_photos} inventory photos")
 
 
 def seed_customers(db: Session) -> dict[str, str]:
@@ -506,6 +580,7 @@ def seed_database() -> None:
             warehouse_ids = seed_warehouses(db)
             driver_ids = seed_drivers(db)
             seed_inventory_items(db, warehouse_ids)
+            seed_inventory_photos(db)
         else:
             # Get existing IDs
             warehouses = db.query(Warehouse).all()
@@ -515,6 +590,11 @@ def seed_database() -> None:
             driver_ids = {d.name: d.driver_id for d in drivers}
 
             print(f"ℹ️  Using existing {existing_warehouses} warehouses, {existing_drivers} drivers, {existing_items} items")
+
+            # Seed photos if they don't exist
+            existing_photos = db.query(InventoryPhoto).count()
+            if existing_photos == 0:
+                seed_inventory_photos(db)
 
         # Always seed customers and bookings if they don't exist
         if existing_customers == 0:
@@ -536,6 +616,7 @@ def seed_database() -> None:
         print(f"   • {db.query(Warehouse).count()} warehouses")
         print(f"   • {db.query(Driver).count()} drivers")
         print(f"   • {db.query(InventoryItem).count()} inventory items")
+        print(f"   • {db.query(InventoryPhoto).count()} inventory photos")
         print(f"   • {db.query(Customer).count()} customers")
         print(f"   • {db.query(Booking).count()} bookings")
         print(f"   • {db.query(BookingItem).count()} booking items")

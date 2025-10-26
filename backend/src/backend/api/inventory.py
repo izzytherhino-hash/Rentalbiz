@@ -19,6 +19,7 @@ import shutil
 from backend.database import get_db
 from backend.database.models import (
     InventoryItem,
+    InventoryPhoto,
     Booking,
     BookingItem,
     BookingStatus,
@@ -27,6 +28,9 @@ from backend.database.schemas import (
     InventoryItem as InventoryItemSchema,
     InventoryItemCreate,
     InventoryItemUpdate,
+    InventoryPhoto as InventoryPhotoSchema,
+    InventoryPhotoCreate,
+    InventoryPhotoUpdate,
 )
 
 router = APIRouter()
@@ -98,7 +102,9 @@ async def list_inventory(
     Example:
         GET /api/inventory?category=Inflatable&status=available
     """
-    query = db.query(InventoryItem)
+    from sqlalchemy.orm import joinedload
+
+    query = db.query(InventoryItem).options(joinedload(InventoryItem.photos))
 
     if category:
         query = query.filter(InventoryItem.category == category)
@@ -462,3 +468,302 @@ async def upload_item_image(
         "url": f"/uploads/{unique_filename}",
         "filename": file.filename,
     }
+
+
+# Photo Management Endpoints
+
+
+@router.get("/{item_id}/photos", response_model=List[InventoryPhotoSchema])
+async def get_item_photos(
+    item_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Get all photos for a specific inventory item.
+
+    Args:
+        item_id: Inventory item UUID
+        db: Database session
+
+    Returns:
+        List of photos ordered by display_order
+
+    Raises:
+        HTTPException: If item not found
+    """
+    # Verify item exists
+    item = db.query(InventoryItem).filter(
+        InventoryItem.inventory_item_id == item_id
+    ).first()
+
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Inventory item not found",
+        )
+
+    # Get photos ordered by display_order
+    photos = db.query(InventoryPhoto).filter(
+        InventoryPhoto.inventory_item_id == item_id
+    ).order_by(InventoryPhoto.display_order).all()
+
+    return photos
+
+
+@router.post("/{item_id}/photos", response_model=InventoryPhotoSchema, status_code=status.HTTP_201_CREATED)
+async def add_item_photo(
+    item_id: str,
+    photo_data: InventoryPhotoCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Add a photo to an inventory item.
+
+    Args:
+        item_id: Inventory item UUID
+        photo_data: Photo details
+        db: Database session
+
+    Returns:
+        Created photo
+
+    Raises:
+        HTTPException: If item not found
+    """
+    # Verify item exists
+    item = db.query(InventoryItem).filter(
+        InventoryItem.inventory_item_id == item_id
+    ).first()
+
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Inventory item not found",
+        )
+
+    # Create photo
+    photo = InventoryPhoto(**photo_data.model_dump())
+
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+
+    return photo
+
+
+@router.post("/{item_id}/photos/upload", response_model=InventoryPhotoSchema, status_code=status.HTTP_201_CREATED)
+async def upload_item_photo(
+    item_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Upload a photo file for an inventory item.
+
+    Args:
+        item_id: Inventory item UUID
+        file: Image file to upload
+        db: Database session
+
+    Returns:
+        Created photo with file URL
+
+    Raises:
+        HTTPException: If item not found or file type invalid
+    """
+    # Verify item exists
+    item = db.query(InventoryItem).filter(
+        InventoryItem.inventory_item_id == item_id
+    ).first()
+
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Inventory item not found",
+        )
+
+    # Validate file type
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be an image",
+        )
+
+    # Create uploads directory if it doesn't exist
+    upload_dir = Path("uploads") / "inventory" / str(item_id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate unique filename
+    file_extension = Path(file.filename).suffix
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    file_path = upload_dir / unique_filename
+
+    # Save file
+    try:
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    finally:
+        file.file.close()
+
+    # Get current photo count for display order
+    existing_photos_count = db.query(InventoryPhoto).filter(
+        InventoryPhoto.inventory_item_id == item_id
+    ).count()
+
+    # Create photo record
+    photo_url = f"/uploads/inventory/{item_id}/{unique_filename}"
+    photo = InventoryPhoto(
+        inventory_item_id=item_id,
+        image_url=photo_url,
+        display_order=existing_photos_count,
+        is_thumbnail=(existing_photos_count == 0),  # First photo is thumbnail
+    )
+
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+
+    return photo
+
+
+@router.put("/photos/{photo_id}", response_model=InventoryPhotoSchema)
+async def update_photo(
+    photo_id: str,
+    update_data: InventoryPhotoUpdate,
+    db: Session = Depends(get_db),
+):
+    """
+    Update a photo (change display order, set as thumbnail, etc.).
+
+    If marking as thumbnail, automatically unsets other thumbnails for the same item.
+
+    Args:
+        photo_id: Photo UUID
+        update_data: Fields to update
+        db: Database session
+
+    Returns:
+        Updated photo
+
+    Raises:
+        HTTPException: If photo not found
+    """
+    photo = db.query(InventoryPhoto).filter(
+        InventoryPhoto.photo_id == photo_id
+    ).first()
+
+    if not photo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Photo not found",
+        )
+
+    # If setting as thumbnail, unset other thumbnails for this item
+    update_dict = update_data.model_dump(exclude_unset=True)
+    if update_dict.get('is_thumbnail') is True:
+        db.query(InventoryPhoto).filter(
+            InventoryPhoto.inventory_item_id == photo.inventory_item_id,
+            InventoryPhoto.photo_id != photo_id
+        ).update({'is_thumbnail': False})
+
+    # Update fields
+    for field, value in update_dict.items():
+        setattr(photo, field, value)
+
+    db.commit()
+    db.refresh(photo)
+
+    return photo
+
+
+@router.delete("/photos/{photo_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_photo(
+    photo_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Delete a photo from an inventory item.
+
+    Args:
+        photo_id: Photo UUID
+        db: Database session
+
+    Returns:
+        No content on success
+
+    Raises:
+        HTTPException: If photo not found
+    """
+    photo = db.query(InventoryPhoto).filter(
+        InventoryPhoto.photo_id == photo_id
+    ).first()
+
+    if not photo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Photo not found",
+        )
+
+    db.delete(photo)
+    db.commit()
+
+    return None
+
+
+@router.post("/{item_id}/photos/reorder", response_model=List[InventoryPhotoSchema])
+async def reorder_photos(
+    item_id: str,
+    photo_orders: List[Dict[str, Any]],
+    db: Session = Depends(get_db),
+):
+    """
+    Reorder photos for an inventory item.
+
+    Args:
+        item_id: Inventory item UUID
+        photo_orders: List of {photo_id, display_order} dictionaries
+        db: Database session
+
+    Returns:
+        Updated list of photos
+
+    Raises:
+        HTTPException: If item or photos not found
+
+    Example:
+        POST /api/inventory/{item_id}/photos/reorder
+        [
+            {"photo_id": "photo-uuid-1", "display_order": 0},
+            {"photo_id": "photo-uuid-2", "display_order": 1},
+            {"photo_id": "photo-uuid-3", "display_order": 2}
+        ]
+    """
+    # Verify item exists
+    item = db.query(InventoryItem).filter(
+        InventoryItem.inventory_item_id == item_id
+    ).first()
+
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Inventory item not found",
+        )
+
+    # Update display orders
+    for photo_order in photo_orders:
+        photo = db.query(InventoryPhoto).filter(
+            InventoryPhoto.photo_id == photo_order['photo_id'],
+            InventoryPhoto.inventory_item_id == item_id
+        ).first()
+
+        if photo:
+            photo.display_order = photo_order['display_order']
+
+    db.commit()
+
+    # Return updated photos
+    photos = db.query(InventoryPhoto).filter(
+        InventoryPhoto.inventory_item_id == item_id
+    ).order_by(InventoryPhoto.display_order).all()
+
+    return photos

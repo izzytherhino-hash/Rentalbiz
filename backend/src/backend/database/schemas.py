@@ -162,6 +162,7 @@ class InventoryItem(InventoryItemBase):
     image_url: Optional[str]
     website_visible: bool
     created_at: datetime
+    photos: List["InventoryPhoto"] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -200,6 +201,45 @@ class InventoryItem(InventoryItemBase):
             pass
 
         return data
+
+
+# Inventory Photo Schemas
+
+
+class InventoryPhotoBase(BaseSchema):
+    """Base inventory photo fields."""
+
+    image_url: str = Field(..., min_length=1, max_length=500)
+    display_order: int = Field(0, ge=0)
+    is_thumbnail: bool = False
+
+
+class InventoryPhotoCreate(InventoryPhotoBase):
+    """Schema for creating a new inventory photo."""
+
+    inventory_item_id: str
+
+
+class InventoryPhotoUpdate(BaseSchema):
+    """Schema for updating an inventory photo."""
+
+    image_url: Optional[str] = Field(None, min_length=1, max_length=500)
+    display_order: Optional[int] = Field(None, ge=0)
+    is_thumbnail: Optional[bool] = None
+
+
+class InventoryPhoto(InventoryPhotoBase):
+    """Complete inventory photo response schema."""
+
+    photo_id: str
+    inventory_item_id: str
+    created_at: datetime
+
+
+class InventoryPhotoReorder(BaseSchema):
+    """Schema for reordering photos."""
+
+    photo_orders: List[dict] = Field(..., min_length=1)  # [{"photo_id": "...", "display_order": 1}, ...]
 
 
 # Driver Schemas

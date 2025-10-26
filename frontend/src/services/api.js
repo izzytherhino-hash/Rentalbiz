@@ -326,6 +326,13 @@ export const adminAPI = {
   getDriverWorkload: async () => {
     return apiFetch('/api/admin/drivers/workload');
   },
+
+  /**
+   * Get driver recommendations for a booking.
+   */
+  getDriverRecommendations: async (bookingId) => {
+    return apiFetch(`/api/admin/drivers/recommendations/${bookingId}`);
+  },
 };
 
 // Chatbot API

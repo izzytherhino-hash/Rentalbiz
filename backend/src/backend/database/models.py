@@ -204,6 +204,9 @@ class InventoryItem(Base):
     )
     booking_items: Mapped[List["BookingItem"]] = relationship("BookingItem", back_populates="inventory_item")
     movements: Mapped[List["InventoryMovement"]] = relationship("InventoryMovement", back_populates="inventory_item")
+    photos: Mapped[List["InventoryPhoto"]] = relationship(
+        "InventoryPhoto", back_populates="inventory_item", cascade="all, delete-orphan"
+    )
 
 
 class Driver(Base):
@@ -437,3 +440,27 @@ class Notification(Base):
     # Relationships
     booking: Mapped["Booking"] = relationship("Booking", back_populates="notifications")
     customer: Mapped["Customer"] = relationship("Customer")
+
+
+class InventoryPhoto(Base):
+    """Photos for inventory items - supports multiple images per item."""
+
+    __tablename__ = "inventory_photos"
+
+    photo_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    inventory_item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inventory_items.inventory_item_id"), nullable=False, index=True
+    )
+    image_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_thumbnail: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    # Relationships
+    inventory_item: Mapped["InventoryItem"] = relationship(
+        "InventoryItem", back_populates="photos"
+    )

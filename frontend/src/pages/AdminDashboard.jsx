@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Package, Truck, MapPin, DollarSign, AlertCircle, Clock, Search, Plus, Filter, Users, Warehouse, CheckCircle, Calendar, X, Edit, Trash2 } from 'lucide-react'
+import { Package, Truck, MapPin, DollarSign, AlertCircle, Clock, Search, Plus, Filter, Users, Warehouse, CheckCircle, Calendar, X, Edit, Trash2, List, Map, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react'
 import { adminAPI, inventoryAPI, driverAPI } from '../services/api'
 import Chatbot from '../components/Chatbot'
 import InventoryModal from '../components/InventoryModal'
+import InventoryMap from '../components/InventoryMap'
 import {
   generateCalendarDays,
   getBookingsForDate,
   getBookingEventType,
-  getEventTypeColor
+  getEventTypeColor,
+  getEventsForDate
 } from './AdminDashboard/utils/calendarHelpers'
 import { getStatusColor, getStatusLabel } from './AdminDashboard/utils/statusHelpers'
 
@@ -38,11 +40,26 @@ export default function AdminDashboard() {
   const [editingItem, setEditingItem] = useState(null)
   const [warehouses, setWarehouses] = useState([])
   const [assigningDriver, setAssigningDriver] = useState(false)
+  const [recommendations, setRecommendations] = useState({})
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false)
+  const [successMessage, setSuccessMessage] = useState(null)
+  const [inventoryViewMode, setInventoryViewMode] = useState('report') // 'report', 'cards', or 'map'
+  const [inventorySearchTerm, setInventorySearchTerm] = useState('')
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('all')
+  const [inventoryPage, setInventoryPage] = useState(1)
+  const ITEMS_PER_PAGE = 21 // 3 columns x 7 rows
 
   // Fetch initial data
   useEffect(() => {
     fetchDashboardData()
   }, [])
+
+  // Fetch recommendations when viewing unassigned trips
+  useEffect(() => {
+    if (view === 'unassigned' && bookings.length > 0) {
+      fetchRecommendations()
+    }
+  }, [view, bookings])
 
   const fetchDashboardData = async () => {
     setLoading(true)
@@ -67,7 +84,18 @@ export default function AdminDashboard() {
       ])
 
       setBookings(bookingsData)
-      setInventory(inventoryData)
+
+      // Prepend full backend URL to photo URLs (for uploaded photos)
+      const inventoryWithFullUrls = inventoryData.map(item => ({
+        ...item,
+        photos: item.photos?.map(photo => ({
+          ...photo,
+          image_url: photo.image_url.startsWith('http')
+            ? photo.image_url
+            : `http://localhost:8000${photo.image_url}`
+        }))
+      }))
+      setInventory(inventoryWithFullUrls)
       setDrivers(driversData)
       setStats(statsData)
       setConflicts(conflictsData.conflicts || [])
@@ -81,16 +109,129 @@ export default function AdminDashboard() {
     }
   }
 
+  // Filter and paginate inventory
+  const filteredInventory = inventory.filter(item => {
+    // Apply search filter
+    const searchLower = inventorySearchTerm.toLowerCase()
+    const matchesSearch = !inventorySearchTerm ||
+      item.name?.toLowerCase().includes(searchLower) ||
+      item.category?.toLowerCase().includes(searchLower) ||
+      item.description?.toLowerCase().includes(searchLower)
+
+    // Apply category filter
+    const matchesCategory = inventoryCategoryFilter === 'all' ||
+      item.category === inventoryCategoryFilter
+
+    return matchesSearch && matchesCategory
+  })
+
+  // Get unique categories for filter dropdown
+  const inventoryCategories = [...new Set(inventory.map(item => item.category))].sort()
+
+  // Paginate for cards view
+  const totalPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE)
+  const paginatedInventory = filteredInventory.slice(
+    (inventoryPage - 1) * ITEMS_PER_PAGE,
+    inventoryPage * ITEMS_PER_PAGE
+  )
+
   // Use imported utility functions
   const calendarDays = generateCalendarDays(selectedDate, bookings)
   const selectedDayBookings = getBookingsForDate(bookings, selectedDate)
 
-  const handleAssignDriver = async (bookingId, driverId) => {
+  // Calculate unassigned trips (delivery + pickup separately)
+  const getUnassignedTrips = () => {
+    const trips = []
+    bookings.forEach(booking => {
+      // Check if delivery driver is unassigned
+      if (!booking.assigned_driver_id && booking.status !== 'cancelled' && booking.status !== 'completed') {
+        trips.push({
+          ...booking,
+          tripType: 'delivery',
+          date: booking.delivery_date
+        })
+      }
+      // Check if pickup driver is unassigned
+      if (!booking.pickup_driver_id && booking.status !== 'cancelled' && booking.status !== 'completed') {
+        trips.push({
+          ...booking,
+          tripType: 'pickup',
+          date: booking.pickup_date
+        })
+      }
+    })
+    return trips
+  }
+
+  const unassignedTrips = getUnassignedTrips()
+
+  // Calculate revenue for bookings delivered this month
+  const getMonthlyRevenue = () => {
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth() + 1 // getMonth() is 0-indexed
+
+    return bookings
+      .filter(booking => {
+        const deliveryDate = new Date(booking.delivery_date)
+        return deliveryDate.getFullYear() === currentYear &&
+               (deliveryDate.getMonth() + 1) === currentMonth
+      })
+      .reduce((sum, booking) => sum + parseFloat(booking.total || 0), 0)
+  }
+
+  const monthlyRevenue = getMonthlyRevenue()
+
+  const fetchRecommendations = async () => {
+    setLoadingRecommendations(true)
+    const newRecommendations = {}
+
+    try {
+      // Calculate unassigned bookings
+      const unassignedBookings = bookings.filter(
+        booking =>
+          !booking.assigned_driver_id &&
+          booking.status !== 'cancelled' &&
+          booking.status !== 'completed'
+      )
+
+      // Fetch recommendations for each unassigned booking
+      await Promise.all(
+        unassignedBookings.map(async (booking) => {
+          try {
+            const result = await adminAPI.getDriverRecommendations(booking.booking_id)
+            newRecommendations[booking.booking_id] = result.recommendations || []
+          } catch (err) {
+            console.error(`Failed to get recommendations for booking ${booking.booking_id}:`, err)
+            newRecommendations[booking.booking_id] = []
+          }
+        })
+      )
+
+      setRecommendations(newRecommendations)
+    } catch (err) {
+      console.error('Error fetching recommendations:', err)
+    } finally {
+      setLoadingRecommendations(false)
+    }
+  }
+
+  const handleAssignDriver = async (bookingId, driverId, tripType = 'delivery') => {
     setAssigningDriver(true)
     setError(null)
+    setSuccessMessage(null)
     try {
-      await adminAPI.updateBooking(bookingId, { assigned_driver_id: driverId })
+      // Update the correct driver field based on trip type
+      const updateField = tripType === 'pickup' ? 'pickup_driver_id' : 'assigned_driver_id'
+      await adminAPI.updateBooking(bookingId, { [updateField]: driverId })
       await fetchDashboardData() // Refresh data
+
+      // Show success message
+      const driverName = drivers.find(d => d.driver_id === driverId)?.name || 'Driver'
+      setSuccessMessage(`${driverName} assigned successfully!`)
+
+      // Auto-hide success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
       setError('Failed to assign driver')
       console.error('Error assigning driver:', err)
@@ -230,12 +371,18 @@ export default function AdminDashboard() {
     // For now, use the warehouses from seed data
     setWarehouses([
       {
-        warehouse_id: '550e8400-e29b-41d4-a716-446655440001',
-        name: 'Warehouse A - Main'
+        warehouse_id: 'b6b08038-3905-4e59-9454-b42e1041b6e6',
+        name: 'Warehouse A - Main',
+        address: '22 E Dyer Ave, Santa Ana, CA 92707',
+        address_lat: '33.7456',
+        address_lng: '-117.8678'
       },
       {
-        warehouse_id: '550e8400-e29b-41d4-a716-446655440002',
-        name: 'Warehouse B - North'
+        warehouse_id: 'd0da53e0-4d75-4868-bffd-2166fee657b0',
+        name: 'Warehouse B - North',
+        address: 'Crystal Cove Shopping Center, Newport Beach, CA 92657',
+        address_lat: '33.5733',
+        address_lng: '-117.8418'
       }
     ])
   }, [])
@@ -350,9 +497,19 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Success message display */}
+        {successMessage && (
+          <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-green-50 border border-green-200 text-green-700 text-xs sm:text-sm">
+            {successMessage}
+          </div>
+        )}
+
         {/* Stats Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4">
+          <div
+            className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 cursor-pointer hover:border-blue-400 transition"
+            onClick={() => setView('bookings')}
+          >
             <div className="flex items-center justify-between mb-1 sm:mb-2">
               <span className="text-xs sm:text-sm text-gray-600">Total Bookings</span>
               <Package className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
@@ -361,27 +518,36 @@ export default function AdminDashboard() {
               {stats?.total_bookings || bookings.length}
             </div>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4">
+          <div
+            className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 cursor-pointer hover:border-green-400 transition"
+            onClick={() => setView('revenue')}
+          >
             <div className="flex items-center justify-between mb-1 sm:mb-2">
-              <span className="text-xs sm:text-sm text-gray-600">Total Revenue</span>
+              <span className="text-xs sm:text-sm text-gray-600">Revenue This Month</span>
               <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
             </div>
             <div className="text-2xl sm:text-3xl font-light text-gray-800">
-              ${stats?.total_revenue || bookings.reduce((sum, b) => sum + (b.total_amount || 0), 0)}
+              ${monthlyRevenue.toFixed(2)}
             </div>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4">
+          <div
+            className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 cursor-pointer hover:border-orange-400 transition"
+            onClick={() => setView('unassigned')}
+          >
             <div className="flex items-center justify-between mb-1 sm:mb-2">
-              <span className="text-xs sm:text-sm text-gray-600">Unassigned</span>
+              <span className="text-xs sm:text-sm text-gray-600">Unassigned Trips</span>
               <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" />
             </div>
             <div className="text-2xl sm:text-3xl font-light text-gray-800">
-              {unassignedBookings.length}
+              {unassignedTrips.length}
             </div>
           </div>
-          <div className={`rounded-lg border-2 p-3 sm:p-4 ${
-            conflicts.length > 0 ? 'bg-red-50 border-red-300' : 'bg-white border-gray-200'
-          }`}>
+          <div
+            className={`rounded-lg border-2 p-3 sm:p-4 cursor-pointer hover:border-red-400 transition ${
+              conflicts.length > 0 ? 'bg-red-50 border-red-300' : 'bg-white border-gray-200'
+            }`}
+            onClick={() => setView('conflicts')}
+          >
             <div className="flex items-center justify-between mb-1 sm:mb-2">
               <span className="text-xs sm:text-sm text-gray-600">Conflicts</span>
               <AlertCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${
@@ -456,19 +622,19 @@ export default function AdminDashboard() {
                         }`}>
                           {day.date}
                         </div>
-                        {day.bookings.length > 0 && (
+                        {day.events && day.events.length > 0 && (
                           <div className="space-y-1">
-                            {day.bookings.slice(0, 2).map(booking => (
+                            {day.events.slice(0, 3).map((event, eventIdx) => (
                               <div
-                                key={booking.booking_id}
-                                className={`text-xs border rounded px-1 py-0.5 truncate ${getEventTypeColor(booking, day.dateStr)}`}
+                                key={`${event.booking.booking_id}-${event.eventType}-${eventIdx}`}
+                                className={`text-xs border rounded px-1 py-0.5 truncate ${getEventTypeColor(event.eventType)}`}
                               >
-                                {booking.customer?.name?.split(' ')[0] || 'N/A'}
+                                {event.booking.customer?.name?.split(' ')[0] || 'N/A'} ({event.eventType === 'delivery' ? 'D' : 'P'})
                               </div>
                             ))}
-                            {day.bookings.length > 2 && (
+                            {day.events.length > 3 && (
                               <div className="text-xs text-gray-500">
-                                +{day.bookings.length - 2} more
+                                +{day.events.length - 3} more
                               </div>
                             )}
                           </div>
@@ -529,12 +695,12 @@ export default function AdminDashboard() {
                         </div>
 
                       <div className="text-xs text-gray-600 mb-2">
-                        ${booking.total_amount}
+                        ${parseFloat(booking.total || 0).toFixed(2)}
                       </div>
 
                       {booking.assigned_driver_id ? (
                         <div className="text-xs text-gray-500 flex items-center">
-                          <Users className="w-3 h-3 mr-1" />
+                          <Truck className="w-3 h-3 mr-1" />
                           {drivers.find(d => d.driver_id === booking.assigned_driver_id)?.name || 'Driver assigned'}
                         </div>
                       ) : (
@@ -565,10 +731,7 @@ export default function AdminDashboard() {
                     </div>
                   </button>
                   <button
-                    onClick={() => {
-                      const deliveries = bookings.filter(b => b.delivery_date === selectedDate)
-                      alert(`${deliveries.length} deliveries scheduled for this date`)
-                    }}
+                    onClick={() => setView('deliveries')}
                     className="w-full flex items-center justify-between py-3 px-4 bg-white border-2 border-gray-200 rounded-lg font-medium hover:border-yellow-400 transition"
                   >
                     <div className="flex items-center">
@@ -580,10 +743,7 @@ export default function AdminDashboard() {
                     </span>
                   </button>
                   <button
-                    onClick={() => {
-                      const pickups = bookings.filter(b => b.pickup_date === selectedDate)
-                      alert(`${pickups.length} pickups scheduled for this date`)
-                    }}
+                    onClick={() => setView('pickups')}
                     className="w-full flex items-center justify-between py-3 px-4 bg-white border-2 border-gray-200 rounded-lg font-medium hover:border-yellow-400 transition"
                   >
                     <div className="flex items-center">
@@ -611,9 +771,49 @@ export default function AdminDashboard() {
         {view === 'inventory' && (
           <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="font-serif text-lg sm:text-xl font-light text-gray-800">
-                Inventory Management
-              </h2>
+              <div className="flex items-center gap-4">
+                <h2 className="font-serif text-lg sm:text-xl font-light text-gray-800">
+                  Inventory Management
+                </h2>
+
+                {/* View Toggle Buttons */}
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setInventoryViewMode('report')}
+                    className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 text-sm transition ${
+                      inventoryViewMode === 'report'
+                        ? 'bg-white text-gray-800 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    <List className="w-4 h-4" />
+                    List
+                  </button>
+                  <button
+                    onClick={() => setInventoryViewMode('cards')}
+                    className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 text-sm transition ${
+                      inventoryViewMode === 'cards'
+                        ? 'bg-white text-gray-800 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                    Cards
+                  </button>
+                  <button
+                    onClick={() => setInventoryViewMode('map')}
+                    className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 text-sm transition ${
+                      inventoryViewMode === 'map'
+                        ? 'bg-white text-gray-800 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    <Map className="w-4 h-4" />
+                    Map
+                  </button>
+                </div>
+              </div>
+
               <button
                 onClick={() => openInventoryModal()}
                 className="bg-yellow-400 text-gray-800 px-4 py-2 rounded-lg font-medium hover:bg-yellow-500 transition flex items-center text-sm"
@@ -623,83 +823,339 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {inventory.map(item => (
-                <div
-                  key={item.inventory_item_id}
-                  className="border-2 border-gray-200 rounded-lg p-4"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-800">{item.name}</h3>
-                      <p className="text-sm text-gray-600">{item.category}</p>
-                      {item.description && (
-                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.description}</p>
-                      )}
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded ml-2 ${
-                      item.status === 'available'
-                        ? 'bg-green-100 text-green-800'
-                        : item.status === 'rented'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {item.status}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 py-3 border-t border-gray-200">
-                    <div>
-                      <div className="text-sm text-gray-600">Price</div>
-                      <div className="text-lg font-medium text-gray-800">${item.base_price}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-600">Warehouse</div>
-                      <div className="text-xs text-gray-800 truncate">
-                        {warehouses.find(w => w.warehouse_id === item.current_warehouse_id)?.name || 'Unknown'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {(item.requires_power || item.min_space_sqft || item.allowed_surfaces?.length > 0) && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {item.requires_power && (
-                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                          Requires Power
-                        </span>
-                      )}
-                      {item.min_space_sqft && (
-                        <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
-                          {item.min_space_sqft} sq ft
-                        </span>
-                      )}
-                      {item.website_visible && (
-                        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                          On Website
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex gap-2 pt-3 border-t border-gray-200">
-                    <button
-                      onClick={() => openInventoryModal(item)}
-                      className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-gray-200 transition flex items-center justify-center"
-                    >
-                      <Edit className="w-4 h-4 mr-1" />
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteInventoryItem(item.inventory_item_id)}
-                      className="flex-1 bg-red-100 text-red-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-red-200 transition flex items-center justify-center"
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Delete
-                    </button>
-                  </div>
+            {/* Search and Filter Controls */}
+            <div className="mb-6 flex flex-col sm:flex-row gap-3">
+                {/* Search */}
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search inventory..."
+                    value={inventorySearchTerm}
+                    onChange={(e) => {
+                      setInventorySearchTerm(e.target.value)
+                      setInventoryPage(1) // Reset to first page on search
+                    }}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
+                  />
                 </div>
-              ))}
-            </div>
+
+                {/* Category Filter */}
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <select
+                    value={inventoryCategoryFilter}
+                    onChange={(e) => {
+                      setInventoryCategoryFilter(e.target.value)
+                      setInventoryPage(1) // Reset to first page on filter change
+                    }}
+                    className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent appearance-none bg-white cursor-pointer"
+                  >
+                    <option value="all">All Categories</option>
+                    {inventoryCategories.map(category => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Results Count */}
+                <div className="flex items-center px-4 py-2 bg-gray-100 rounded-lg text-sm text-gray-600">
+                  {filteredInventory.length} {filteredInventory.length === 1 ? 'item' : 'items'}
+                </div>
+              </div>
+
+            {/* Report View - Table Format */}
+            {inventoryViewMode === 'report' && (
+              <div className="overflow-x-auto">
+                {filteredInventory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-600">No inventory items found</p>
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Item
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Category
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Price
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Warehouse
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredInventory.map((item) => (
+                        <tr
+                          key={item.inventory_item_id}
+                          onClick={() => openInventoryModal(item)}
+                          className="hover:bg-gray-50 cursor-pointer transition"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-10 w-10 flex-shrink-0">
+                                {item.photos && item.photos[0] ? (
+                                  <img
+                                    className="h-10 w-10 rounded object-cover"
+                                    src={item.photos.find(p => p.is_thumbnail)?.image_url || item.photos[0]?.image_url}
+                                    alt={item.name}
+                                    onError={(e) => {
+                                      e.target.style.display = 'none'
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="h-10 w-10 rounded bg-gray-100 flex items-center justify-center">
+                                    <Package className="w-5 h-5 text-gray-400" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                                {item.description && (
+                                  <div className="text-xs text-gray-500 truncate max-w-xs">{item.description}</div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {item.category}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              item.status === 'available'
+                                ? 'bg-green-100 text-green-800'
+                                : item.status === 'rented'
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : item.status === 'maintenance'
+                                ? 'bg-gray-100 text-gray-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {item.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            ${parseFloat(item.base_price).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {warehouses.find(w => w.warehouse_id === item.current_warehouse_id)?.name || 'Unknown'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => openInventoryModal(item)}
+                                className="text-gray-600 hover:text-gray-800"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteInventoryItem(item.inventory_item_id)}
+                                className="text-red-600 hover:text-red-800"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {/* Cards View - 3 Column Grid with Pagination */}
+            {inventoryViewMode === 'cards' && (
+              <>
+                {paginatedInventory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-600">No inventory items found</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                      {paginatedInventory.map(item => {
+                        const thumbnail = item.photos?.find(p => p.is_thumbnail) || item.photos?.[0]
+                        return (
+                          <div
+                            key={item.inventory_item_id}
+                            className="border-2 border-gray-200 rounded-lg overflow-hidden hover:border-yellow-400 transition"
+                          >
+                            {/* Thumbnail Image */}
+                            {thumbnail && (
+                              <div className="w-full h-48 bg-gray-100 flex items-center justify-center">
+                                <img
+                                  src={thumbnail.image_url}
+                                  alt={item.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    console.error('Image failed to load:', thumbnail.image_url)
+                                    e.target.style.display = 'none'
+                                    e.target.parentElement.innerHTML = `
+                                      <div class="text-center p-4">
+                                        <div class="text-gray-400 mb-2">
+                                          <svg class="w-12 h-12 mx-auto" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
+                                          </svg>
+                                        </div>
+                                        <p class="text-xs text-gray-500">Image not available</p>
+                                      </div>
+                                    `
+                                  }}
+                                  loading="lazy"
+                                />
+                              </div>
+                            )}
+
+                            <div className="p-4">
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex-1">
+                                  <h3 className="font-medium text-gray-800">{item.name}</h3>
+                                  <p className="text-sm text-gray-600">{item.category}</p>
+                                  {item.description && (
+                                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.description}</p>
+                                  )}
+                                </div>
+                                <span className={`text-xs px-2 py-1 rounded ml-2 ${
+                                  item.status === 'available'
+                                    ? 'bg-green-100 text-green-800'
+                                    : item.status === 'rented'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {item.status}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 py-3 border-t border-gray-200">
+                                <div>
+                                  <div className="text-sm text-gray-600">Price</div>
+                                  <div className="text-lg font-medium text-gray-800">${item.base_price}</div>
+                                </div>
+                                <div>
+                                  <div className="text-sm text-gray-600">Warehouse</div>
+                                  <div className="text-xs text-gray-800 truncate">
+                                    {warehouses.find(w => w.warehouse_id === item.current_warehouse_id)?.name || 'Unknown'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {(item.requires_power || item.min_space_sqft || item.website_visible) && (
+                                <div className="flex flex-wrap gap-1 mb-3">
+                                  {item.requires_power && (
+                                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                      Requires Power
+                                    </span>
+                                  )}
+                                  {item.min_space_sqft && (
+                                    <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                                      {item.min_space_sqft} sq ft
+                                    </span>
+                                  )}
+                                  {item.website_visible && (
+                                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                                      On Website
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="flex gap-2 pt-3 border-t border-gray-200">
+                                <button
+                                  onClick={() => openInventoryModal(item)}
+                                  className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-gray-200 transition flex items-center justify-center"
+                                >
+                                  <Edit className="w-4 h-4 mr-1" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteInventoryItem(item.inventory_item_id)}
+                                  className="flex-1 bg-red-100 text-red-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-red-200 transition flex items-center justify-center"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+                        <div className="text-sm text-gray-600">
+                          Showing {(inventoryPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(inventoryPage * ITEMS_PER_PAGE, filteredInventory.length)} of {filteredInventory.length} items
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setInventoryPage(inventoryPage - 1)}
+                            disabled={inventoryPage === 1}
+                            className={`px-3 py-1.5 rounded-lg flex items-center gap-1 text-sm transition ${
+                              inventoryPage === 1
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                            Previous
+                          </button>
+                          <div className="flex items-center gap-1">
+                            {[...Array(totalPages)].map((_, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setInventoryPage(idx + 1)}
+                                className={`px-3 py-1.5 rounded-lg text-sm transition ${
+                                  inventoryPage === idx + 1
+                                    ? 'bg-yellow-400 text-gray-800'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                              >
+                                {idx + 1}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setInventoryPage(inventoryPage + 1)}
+                            disabled={inventoryPage === totalPages}
+                            className={`px-3 py-1.5 rounded-lg flex items-center gap-1 text-sm transition ${
+                              inventoryPage === totalPages
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            Next
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
+            {/* Map View */}
+            {inventoryViewMode === 'map' && (
+              <InventoryMap
+                inventory={filteredInventory}
+                warehouses={warehouses}
+                bookings={bookings}
+              />
+            )}
           </div>
         )}
 
@@ -875,45 +1331,234 @@ export default function AdminDashboard() {
 
         {/* Conflicts View */}
         {view === 'conflicts' && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="font-serif text-xl font-light text-gray-800 mb-4">
-              Booking Conflicts
-            </h2>
-            {conflicts.length === 0 ? (
-              <div className="text-center py-12">
-                <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                <p className="text-gray-600">No conflicts detected!</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {conflicts.map((conflict, idx) => (
-                  <div key={idx} className="border-2 border-red-300 bg-red-50 rounded-lg p-4">
-                    <h3 className="text-lg font-medium text-red-900 mb-2">
-                      Item Conflict
-                    </h3>
-                    <p className="text-sm text-red-700 mb-3">
-                      Double-booked: {conflict.item_name}
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-white p-3 rounded">
-                        <p className="font-medium">{conflict.booking1.customer?.name || 'N/A'}</p>
-                        <p className="text-sm text-gray-600">{conflict.booking1.order_number}</p>
-                        <p className="text-xs text-gray-500 mt-1">
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="font-serif text-xl font-light text-gray-800">
+                Booking Conflicts
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
+              {conflicts.length === 0 ? (
+                <div className="text-center py-12">
+                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                  <p className="text-xl font-medium text-green-700 mb-2">Good to go, no conflicts!</p>
+                  <p className="text-gray-600">All inventory items are properly scheduled</p>
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Conflicted Item
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Booking 1
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Customer 1
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Dates 1
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Booking 2
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Customer 2
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Dates 2
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {conflicts.map((conflict, idx) => (
+                      <tr
+                        key={idx}
+                        className="hover:bg-red-50 cursor-pointer transition bg-red-50"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-red-900">
+                          {conflict.item_name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {conflict.booking1.order_number}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {conflict.booking1.customer?.name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {new Date(conflict.booking1.delivery_date).toLocaleDateString()} - {new Date(conflict.booking1.pickup_date).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="bg-white p-3 rounded">
-                        <p className="font-medium">{conflict.booking2.customer?.name || 'N/A'}</p>
-                        <p className="text-sm text-gray-600">{conflict.booking2.order_number}</p>
-                        <p className="text-xs text-gray-500 mt-1">
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {conflict.booking2.order_number}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {conflict.booking2.customer?.name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {new Date(conflict.booking2.delivery_date).toLocaleDateString()} - {new Date(conflict.booking2.pickup_date).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Unassigned Trips View */}
+        {view === 'unassigned' && (
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="font-serif text-xl font-light text-gray-800">
+                Unassigned Trips
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
+              {unassignedTrips.length === 0 ? (
+                <div className="text-center py-12">
+                  <CheckCircle className="w-16 h-16 text-green-300 mx-auto mb-4" />
+                  <p className="text-gray-600">All trips have drivers assigned!</p>
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Customer
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Trip Type
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Address
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Items
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Recommended Driver
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Assign Driver
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {unassignedTrips.map((trip, idx) => {
+                      const bookingRecommendations = recommendations[trip.booking_id] || []
+                      let topRecommendation = bookingRecommendations[0]
+
+                      // For pickup trips, recommend the delivery driver if available
+                      if (trip.tripType === 'pickup' && !topRecommendation && trip.assigned_driver_id) {
+                        const deliveryDriver = drivers.find(d => d.driver_id === trip.assigned_driver_id)
+                        if (deliveryDriver) {
+                          topRecommendation = {
+                            driver_id: deliveryDriver.driver_id,
+                            driver_name: deliveryDriver.name,
+                            reason: "Delivered this order",
+                            score: 0,
+                            distance_to_delivery: 0,
+                            route_disruption: 0,
+                            current_stops: 0
+                          }
+                        }
+                      }
+
+                      // Sort drivers: recommended first, then alphabetically
+                      const sortedDrivers = [...drivers].sort((a, b) => {
+                        if (topRecommendation) {
+                          if (a.driver_id === topRecommendation.driver_id) return -1
+                          if (b.driver_id === topRecommendation.driver_id) return 1
+                        }
+                        return a.name.localeCompare(b.name)
+                      })
+
+                      return (
+                        <tr key={`${trip.booking_id}-${trip.tripType}-${idx}`} className="hover:bg-gray-50 transition">
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {trip.customer?.name || 'N/A'}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
+                              trip.tripType === 'delivery'
+                                ? 'bg-green-100 border-green-400 text-green-800'
+                                : 'bg-blue-100 border-blue-400 text-blue-800'
+                            }`}>
+                              {trip.tripType === 'delivery' ? 'Delivery' : 'Pickup'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {new Date(trip.date).toLocaleDateString()}
+                          </td>
+                          <td className="px-3 py-4 text-sm text-gray-700">
+                            <div className="max-w-[200px] break-words">
+                              {trip.delivery_address}
+                            </div>
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {trip.booking_items?.length || 0} items
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap">
+                            {loadingRecommendations ? (
+                              <span className="text-xs text-gray-400">Loading...</span>
+                            ) : topRecommendation ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="px-2 py-1 text-xs font-medium rounded-full border bg-purple-50 border-purple-400 text-purple-800 flex items-center gap-1 w-fit">
+                                  <span className="text-sm">✨</span>
+                                  {topRecommendation.driver_name}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {topRecommendation.reason}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">No recommendation</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-2">
+                              {topRecommendation && (
+                                <button
+                                  onClick={() => handleAssignDriver(trip.booking_id, topRecommendation.driver_id, trip.tripType)}
+                                  disabled={assigningDriver}
+                                  className="px-3 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md transition disabled:opacity-50"
+                                  title="Quick assign AI recommended driver"
+                                >
+                                  Quick Assign
+                                </button>
+                              )}
+                              <select
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    handleAssignDriver(trip.booking_id, e.target.value, trip.tripType)
+                                    e.target.value = ''
+                                  }
+                                }}
+                                disabled={assigningDriver}
+                                className="block text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50"
+                              >
+                                <option value="">Choose driver...</option>
+                                {sortedDrivers.map(driver => (
+                                  <option key={driver.driver_id} value={driver.driver_id}>
+                                    {driver.name}
+                                    {topRecommendation && driver.driver_id === topRecommendation.driver_id ? ' ✨' : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         )}
 
@@ -1001,6 +1646,283 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Deliveries View */}
+        {view === 'deliveries' && (
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="font-serif text-xl font-light text-gray-800">
+                Deliveries for {new Date(selectedDate).toLocaleDateString('en-US', {
+                  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+                })}
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
+              {bookings.filter(b => b.delivery_date === selectedDate).length === 0 ? (
+                <div className="text-center py-12">
+                  <Truck className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600">No deliveries scheduled for this day</p>
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Order #
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Customer
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Address
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Items
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Driver
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {bookings.filter(b => b.delivery_date === selectedDate).map((booking) => (
+                      <tr
+                        key={booking.booking_id}
+                        onClick={() => setSelectedBooking(booking)}
+                        className="hover:bg-gray-50 cursor-pointer transition"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {booking.order_number}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {booking.customer?.name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          <div className="max-w-xs truncate">
+                            {booking.delivery_address}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {booking.booking_items?.length || 0} items
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {drivers.find(d => d.driver_id === booking.assigned_driver_id)?.name || (
+                            <span className="text-orange-600">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
+                            getStatusColor(booking.status)
+                          }`}>
+                            {booking.status.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          ${parseFloat(booking.total).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Pickups View */}
+        {view === 'pickups' && (
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="font-serif text-xl font-light text-gray-800">
+                Pickups for {new Date(selectedDate).toLocaleDateString('en-US', {
+                  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+                })}
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
+              {bookings.filter(b => b.pickup_date === selectedDate).length === 0 ? (
+                <div className="text-center py-12">
+                  <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600">No pickups scheduled for this day</p>
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Order #
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Customer
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Address
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Items
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Driver
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {bookings.filter(b => b.pickup_date === selectedDate).map((booking) => (
+                      <tr
+                        key={booking.booking_id}
+                        onClick={() => setSelectedBooking(booking)}
+                        className="hover:bg-gray-50 cursor-pointer transition"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {booking.order_number}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {booking.customer?.name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          <div className="max-w-xs truncate">
+                            {booking.delivery_address}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {booking.booking_items?.length || 0} items
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {drivers.find(d => d.driver_id === booking.pickup_driver_id)?.name || (
+                            <span className="text-orange-600">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
+                            getStatusColor(booking.status)
+                          }`}>
+                            {booking.status.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          ${parseFloat(booking.total).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Revenue View */}
+        {view === 'revenue' && (
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="font-serif text-xl font-light text-gray-800">
+                Revenue This Month
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              {(() => {
+                const now = new Date()
+                const currentYear = now.getFullYear()
+                const currentMonth = now.getMonth() + 1
+                const monthlyBookings = bookings.filter(booking => {
+                  const deliveryDate = new Date(booking.delivery_date)
+                  return deliveryDate.getFullYear() === currentYear &&
+                         (deliveryDate.getMonth() + 1) === currentMonth
+                })
+                return monthlyBookings.length === 0 ? (
+                  <div className="text-center py-12">
+                    <DollarSign className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-600">No revenue for this month</p>
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Order #
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Customer
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Delivery Date
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Pickup Date
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Revenue
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {monthlyBookings
+                        .sort((a, b) => parseFloat(b.total) - parseFloat(a.total))
+                        .map((booking) => (
+                        <tr
+                          key={booking.booking_id}
+                          onClick={() => setSelectedBooking(booking)}
+                          className="hover:bg-gray-50 cursor-pointer transition"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {booking.order_number}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {booking.customer?.name || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {new Date(booking.delivery_date).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {new Date(booking.pickup_date).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
+                              getStatusColor(booking.status)
+                            }`}>
+                              {booking.status.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-700">
+                            ${parseFloat(booking.total).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                    <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                      <tr>
+                        <td colSpan="5" className="px-6 py-4 text-right text-sm font-bold text-gray-900">
+                          Total Revenue This Month:
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-lg font-bold text-green-700">
+                          ${monthlyBookings.reduce((sum, b) => sum + parseFloat(b.total || 0), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                )
+              })()}
             </div>
           </div>
         )}

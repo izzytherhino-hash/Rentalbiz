@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { MapPin, Phone, Navigation, CheckCircle, Package, Clock, User, ArrowLeft, Warehouse, AlertCircle } from 'lucide-react'
 import { driverAPI } from '../services/api'
+import DriverRouteMap from '../components/DriverRouteMap'
 
 export default function DriverDashboard() {
   const [drivers, setDrivers] = useState([])
@@ -283,7 +284,7 @@ export default function DriverDashboard() {
           </div>
         </div>
 
-        {/* Google Maps Route Visualization */}
+        {/* Route Map Visualization */}
         {stops.length > 0 && (
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
@@ -293,35 +294,11 @@ export default function DriverDashboard() {
                 className="text-xs text-yellow-600 hover:text-yellow-700 font-medium flex items-center gap-1 uppercase tracking-wide"
               >
                 <Navigation className="w-3 h-3" />
-                Open in Maps
+                Open in Google Maps
               </button>
             </div>
-            <div className="relative" style={{ paddingBottom: '56.25%' }}>
-              <iframe
-                src={(() => {
-                  const addresses = stops
-                    .map(stop => stop.address || stop.warehouse?.address)
-                    .filter(Boolean)
-                  if (addresses.length === 0) return ''
-
-                  const origin = encodeURIComponent(addresses[0])
-                  const destination = encodeURIComponent(addresses[addresses.length - 1])
-                  const waypoints = addresses
-                    .slice(1, -1)
-                    .map(addr => encodeURIComponent(addr))
-                    .join('|')
-
-                  let url = `https://www.google.com/maps/embed/v1/directions?key=AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw&origin=${origin}&destination=${destination}`
-                  if (waypoints) {
-                    url += `&waypoints=${waypoints}`
-                  }
-                  return url
-                })()}
-                className="absolute top-0 left-0 w-full h-full border-0"
-                allowFullScreen
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
+            <div style={{ height: '500px' }}>
+              <DriverRouteMap stops={stops} />
             </div>
           </div>
         )}
@@ -393,10 +370,23 @@ export default function DriverDashboard() {
                             </span>
                           </div>
                           <h3 className="font-medium text-gray-800">
-                            {stop.warehouse?.name || stop.booking?.customer_name || 'Unknown'}
+                            {stop.type === 'warehouse_pickup' ? 'Pick up' :
+                             stop.type === 'warehouse_return' ? 'Drop off' :
+                             stop.booking?.customer_name || 'Unknown'}
                           </h3>
                           {stop.booking?.order_number && (
                             <p className="text-xs text-gray-500 mt-1">Order {stop.booking.order_number}</p>
+                          )}
+                          {(stop.type === 'warehouse_pickup' || stop.type === 'warehouse_return') && stop.warehouse_name && (
+                            <p className="text-xs text-gray-500 mt-1">{stop.warehouse_name}</p>
+                          )}
+                          {(stop.type === 'warehouse_pickup' || stop.type === 'warehouse_return') && stop.items && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {stop.type === 'warehouse_pickup'
+                                ? `For: ${[...new Set(stop.items.map(item => item.for_order))].filter(Boolean).join(', ')}`
+                                : `From: ${[...new Set(stop.items.map(item => item.from_order))].filter(Boolean).join(', ')}`
+                              }
+                            </p>
                           )}
                         </div>
                       </div>
