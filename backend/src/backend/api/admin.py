@@ -344,7 +344,7 @@ async def get_driver_recommendations(booking_id: str, db: Session = Depends(get_
             ]
         }
     """
-    from backend.services.route_optimizer import recommend_drivers
+    from services.route_optimizer import recommend_drivers
 
     # Get the booking
     booking = db.query(Booking).filter(Booking.booking_id == booking_id).first()
