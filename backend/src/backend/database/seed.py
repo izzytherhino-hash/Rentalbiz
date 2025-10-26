@@ -398,6 +398,7 @@ def seed_bookings(
     popcorn = next((i for i in items if "Popcorn" in i.name), None)
     photo_booth = next((i for i in items if "Photo Booth" in i.name), None)
     tables = next((i for i in items if "Tables" in i.name), None)
+    obstacle_course = next((i for i in items if "Obstacle Course" in i.name), None)
 
     today = date.today()
 
