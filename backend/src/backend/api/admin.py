@@ -539,6 +539,83 @@ async def seed_database(db: Session = Depends(get_db)):
         )
 
 
+@router.post("/clear-and-reseed")
+async def clear_and_reseed(db: Session = Depends(get_db)):
+    """
+    Clear ALL database data and reseed with fresh data.
+
+    Deletes everything from all tables and reseeds with:
+    - 3 warehouses
+    - 8 inventory items
+    - 3 drivers
+    - 10 customers
+    - 15 bookings
+
+    WARNING: This will delete ALL data in the database!
+
+    Returns:
+        dict: Summary of reseeded data
+    """
+    from backend.database.seed import run_seed
+    from backend.database.models import (
+        Customer, InventoryItem, Driver, Warehouse,
+        BookingItem, InventoryPhoto, Notification, Payment, InventoryMovement
+    )
+
+    try:
+        # Get counts before deletion
+        old_counts = {
+            "bookings": db.query(Booking).count(),
+            "customers": db.query(Customer).count(),
+            "drivers": db.query(Driver).count(),
+            "inventory": db.query(InventoryItem).count(),
+            "warehouses": db.query(Warehouse).count(),
+        }
+
+        # Delete all data in correct order (respecting foreign keys)
+        print("🗑️  Deleting all database data...")
+        db.query(BookingItem).delete()
+        db.query(Booking).delete()
+        db.query(InventoryPhoto).delete()
+        db.query(InventoryMovement).delete()
+        db.query(Payment).delete()
+        db.query(Notification).delete()
+        db.query(InventoryItem).delete()
+        db.query(Customer).delete()
+        db.query(Driver).delete()
+        db.query(Warehouse).delete()
+        db.commit()
+        print("✅ All data deleted successfully")
+
+        # Reseed everything fresh
+        print("🌱 Reseeding database with fresh data...")
+        run_seed(db)
+        db.commit()
+        print("✅ Database reseeded successfully")
+
+        # Get counts after seeding
+        new_counts = {
+            "warehouses": db.query(Warehouse).count(),
+            "inventory": db.query(InventoryItem).count(),
+            "drivers": db.query(Driver).count(),
+            "customers": db.query(Customer).count(),
+            "bookings": db.query(Booking).count(),
+        }
+
+        return {
+            "success": True,
+            "message": "Database cleared and reseeded successfully",
+            "old_counts": old_counts,
+            "new_counts": new_counts
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error clearing and reseeding: {str(e)}"
+        )
+
+
 @router.post("/reseed-bookings")
 async def reseed_bookings(db: Session = Depends(get_db)):
     """
