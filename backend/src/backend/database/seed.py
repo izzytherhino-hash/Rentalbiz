@@ -542,7 +542,7 @@ def seed_bookings(
         },
         # Booking 7: Completed last month
         {
-            "customer_id": customer_ids["Lisa Anderson"],
+            "customer_id": customer_ids["Amanda Garcia"],
             "delivery_date": today - timedelta(days=30),
             "pickup_date": today - timedelta(days=28),
             "delivery_address": "8765 Ocean View, Laguna Beach, CA 92651",
@@ -691,7 +691,7 @@ def seed_bookings(
         },
         # Booking 14: Yesterday's pickup
         {
-            "customer_id": customer_ids["Lisa Anderson"],
+            "customer_id": customer_ids["Amanda Garcia"],
             "delivery_date": today - timedelta(days=3),
             "pickup_date": today - timedelta(days=1),
             "delivery_address": "7531 Marina Drive, Newport Beach, CA 92662",
