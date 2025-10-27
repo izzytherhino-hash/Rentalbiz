@@ -291,6 +291,19 @@ async def get_unassigned_bookings(db: Session = Depends(get_db)):
                 "delivery_address": booking.delivery_address,
             })
 
+    # Sort trips by date (closest date first)
+    # For delivery trips, use delivery_date; for pickup trips, use pickup_date
+    from datetime import datetime
+
+    def get_trip_date(trip):
+        """Get the relevant date for a trip based on its type."""
+        if trip["tripType"] == "delivery":
+            return datetime.fromisoformat(trip["delivery_date"])
+        else:  # pickup
+            return datetime.fromisoformat(trip["pickup_date"]) if trip["pickup_date"] else datetime.max
+
+    trips.sort(key=get_trip_date)
+
     return {
         "total": len(trips),
         "trips": trips,
