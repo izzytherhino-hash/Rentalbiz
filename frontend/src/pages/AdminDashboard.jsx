@@ -1457,7 +1457,7 @@ export default function AdminDashboard() {
                       return (
                         <tr key={`${trip.booking_id}-${trip.tripType}-${idx}`} className="hover:bg-gray-50 transition">
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
-                            {trip.customer?.name || 'N/A'}
+                            {trip.customer_name || 'N/A'}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
@@ -1469,7 +1469,7 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
-                            {new Date(trip.date).toLocaleDateString()}
+                            {new Date(trip.tripType === 'delivery' ? trip.delivery_date : trip.pickup_date).toLocaleDateString()}
                           </td>
                           <td className="px-3 py-4 text-sm text-gray-700">
                             <div className="max-w-[200px] break-words">
@@ -1477,7 +1477,7 @@ export default function AdminDashboard() {
                             </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
-                            {trip.booking_items?.length || 0} items
+                            {trip.items_count || 0} items
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             {loadingRecommendations ? (
