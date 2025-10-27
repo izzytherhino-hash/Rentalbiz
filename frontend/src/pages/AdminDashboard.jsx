@@ -3,6 +3,8 @@ import { Package, Truck, MapPin, DollarSign, AlertCircle, Clock, Search, Plus, F
 import { adminAPI, inventoryAPI, driverAPI, API_BASE_URL } from '../services/api'
 import Chatbot from '../components/Chatbot'
 import InventoryModal from '../components/InventoryModal'
+import InventoryCalendarModal from '../components/InventoryCalendarModal'
+import DriverCalendarModal from '../components/DriverCalendarModal'
 import InventoryMap from '../components/InventoryMap'
 import {
   generateCalendarDays,
@@ -37,6 +39,10 @@ export default function AdminDashboard() {
     is_active: true
   })
   const [showInventoryModal, setShowInventoryModal] = useState(false)
+  const [showCalendarModal, setShowCalendarModal] = useState(false)
+  const [calendarItem, setCalendarItem] = useState(null)
+  const [showDriverCalendarModal, setShowDriverCalendarModal] = useState(false)
+  const [selectedDriver, setSelectedDriver] = useState(null)
   const [editingItem, setEditingItem] = useState(null)
   const [warehouses, setWarehouses] = useState([])
   const [assigningDriver, setAssigningDriver] = useState(false)
@@ -302,6 +308,26 @@ export default function AdminDashboard() {
   const closeInventoryModal = () => {
     setShowInventoryModal(false)
     setEditingItem(null)
+  }
+
+  const openCalendarModal = (item) => {
+    setCalendarItem(item)
+    setShowCalendarModal(true)
+  }
+
+  const closeCalendarModal = () => {
+    setCalendarItem(null)
+    setShowCalendarModal(false)
+  }
+
+  const openDriverCalendarModal = (driver) => {
+    setSelectedDriver(driver)
+    setShowDriverCalendarModal(true)
+  }
+
+  const closeDriverCalendarModal = () => {
+    setSelectedDriver(null)
+    setShowDriverCalendarModal(false)
   }
 
   const handleSaveInventoryItem = async (itemData) => {
@@ -877,7 +903,7 @@ export default function AdminDashboard() {
                       {filteredInventory.map((item) => (
                         <tr
                           key={item.inventory_item_id}
-                          onClick={() => openInventoryModal(item)}
+                          onClick={() => openCalendarModal(item)}
                           className="hover:bg-gray-50 cursor-pointer transition"
                         >
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -969,6 +995,8 @@ export default function AdminDashboard() {
                           <div
                             key={item.inventory_item_id}
                             className="border-2 border-gray-200 rounded-lg overflow-hidden hover:border-yellow-400 transition"
+                            onClick={() => openCalendarModal(item)}
+                            style={{ cursor: "pointer" }}
                           >
                             {/* Thumbnail Image */}
                             {thumbnail && (
@@ -1051,7 +1079,7 @@ export default function AdminDashboard() {
 
                               <div className="flex gap-2 pt-3 border-t border-gray-200">
                                 <button
-                                  onClick={() => openInventoryModal(item)}
+                                  onClick={(e) => { e.stopPropagation(); openInventoryModal(item); }}
                                   className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-gray-200 transition flex items-center justify-center"
                                 >
                                   <Edit className="w-4 h-4 mr-1" />
@@ -1158,8 +1186,9 @@ export default function AdminDashboard() {
                 return (
                   <div
                     key={driver.driver_id}
-                    className={`border-2 rounded-lg p-4 ${
-                      driver.is_active ? 'border-gray-200' : 'border-gray-300 bg-gray-50 opacity-75'
+                    onClick={() => openDriverCalendarModal(driver)}
+                    className={`border-2 rounded-lg p-4 cursor-pointer hover:shadow-md transition ${
+                      driver.is_active ? 'border-gray-200 hover:border-yellow-400' : 'border-gray-300 bg-gray-50 opacity-75'
                     }`}
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -1243,7 +1272,10 @@ export default function AdminDashboard() {
 
                     <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
                       <button
-                        onClick={() => openDriverModal(driver)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openDriverModal(driver)
+                        }}
                         className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-gray-200 transition flex items-center justify-center"
                       >
                         <Edit className="w-4 h-4 mr-1" />
@@ -1264,45 +1296,6 @@ export default function AdminDashboard() {
                 )
               })}
             </div>
-
-            {/* Unassigned Bookings */}
-            {unassignedBookings.length > 0 && (
-              <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4 sm:p-6 mt-6">
-                <div className="flex items-center mb-4">
-                  <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600 mr-3" />
-                  <h3 className="text-base sm:text-lg font-medium text-orange-800">
-                    Unassigned Bookings ({unassignedBookings.length})
-                  </h3>
-                </div>
-                <div className="space-y-3">
-                  {unassignedBookings.map(booking => (
-                    <div key={booking.booking_id} className="bg-white border border-orange-200 rounded-lg p-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
-                        <div>
-                          <h4 className="font-medium text-gray-800">{booking.customer_name}</h4>
-                          <p className="text-sm text-gray-600">{booking.order_number}</p>
-                        </div>
-                        <span className="text-sm text-gray-600">
-                          {new Date(booking.delivery_date).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <select
-                        onChange={(e) => handleAssignDriver(booking.booking_id, e.target.value)}
-                        className="w-full bg-yellow-400 text-gray-800 py-2 px-3 rounded-lg text-sm font-medium hover:bg-yellow-500 transition focus:outline-none"
-                        defaultValue=""
-                      >
-                        <option value="" disabled>Assign Driver</option>
-                        {drivers.filter(d => d.is_active).map(driver => (
-                          <option key={driver.driver_id} value={driver.driver_id} className="text-gray-800">
-                            {driver.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -2436,6 +2429,22 @@ export default function AdminDashboard() {
           warehouses={warehouses}
           onClose={closeInventoryModal}
           onSave={handleSaveInventoryItem}
+        />
+      )}
+
+      {/* Inventory Calendar Modal */}
+      {showCalendarModal && calendarItem && (
+        <InventoryCalendarModal
+          item={calendarItem}
+          onClose={closeCalendarModal}
+        />
+      )}
+
+      {/* Driver Calendar Modal */}
+      {showDriverCalendarModal && selectedDriver && (
+        <DriverCalendarModal
+          driver={selectedDriver}
+          onClose={closeDriverCalendarModal}
         />
       )}
 
