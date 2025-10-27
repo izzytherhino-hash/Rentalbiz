@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
 import { X, Calendar, Package, DollarSign, MapPin } from 'lucide-react'
 import axios from 'axios'
+import { API_BASE_URL } from '../services/api'
 
 export default function InventoryCalendarModal({ item, onClose }) {
   const [calendarData, setCalendarData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [currentMonth, setCurrentMonth] = useState(new Date())
-
-  const API_URL = 'http://localhost:8000/api'
 
   useEffect(() => {
     if (item) {
@@ -27,7 +26,7 @@ export default function InventoryCalendarModal({ item, onClose }) {
       const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
       const response = await axios.get(
-        `${API_URL}/inventory/${item.inventory_item_id}/calendar?start_date=${startDate}&end_date=${endDate}`
+        `${API_BASE_URL}/api/inventory/${item.inventory_item_id}/calendar?start_date=${startDate}&end_date=${endDate}`
       )
       setCalendarData(response.data)
     } catch (error) {

@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
 import { X, Calendar, MapPin, Package, Clock, DollarSign, Truck } from 'lucide-react'
 import axios from 'axios'
+import { API_BASE_URL } from '../services/api'
 
 export default function DriverCalendarModal({ driver, onClose }) {
   const [routeData, setRouteData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(new Date())
-
-  const API_URL = 'http://localhost:8000/api'
 
   useEffect(() => {
     if (driver) {
@@ -20,7 +19,7 @@ export default function DriverCalendarModal({ driver, onClose }) {
     try {
       const dateStr = selectedDate.toISOString().split('T')[0]
       const response = await axios.get(
-        `${API_URL}/drivers/${driver.driver_id}/route/${dateStr}`
+        `${API_BASE_URL}/api/drivers/${driver.driver_id}/route/${dateStr}`
       )
       setRouteData(response.data)
     } catch (error) {
