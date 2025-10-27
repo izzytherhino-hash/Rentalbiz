@@ -166,23 +166,24 @@ export default function AdminDashboard() {
     const newRecommendations = {}
 
     try {
-      // Calculate unassigned bookings
-      const unassignedBookings = bookings.filter(
-        booking =>
-          !booking.assigned_driver_id &&
-          booking.status !== 'cancelled' &&
-          booking.status !== 'completed'
-      )
+      // Use unassigned trips from backend (includes both delivery and pickup trips)
+      if (!unassignedTrips || unassignedTrips.length === 0) {
+        setRecommendations({})
+        return
+      }
 
-      // Fetch recommendations for each unassigned booking
+      // Get unique booking IDs from unassigned trips
+      const uniqueBookingIds = [...new Set(unassignedTrips.map(trip => trip.booking_id))]
+
+      // Fetch recommendations for each booking
       await Promise.all(
-        unassignedBookings.map(async (booking) => {
+        uniqueBookingIds.map(async (bookingId) => {
           try {
-            const result = await adminAPI.getDriverRecommendations(booking.booking_id)
-            newRecommendations[booking.booking_id] = result.recommendations || []
+            const result = await adminAPI.getDriverRecommendations(bookingId)
+            newRecommendations[bookingId] = result.recommendations || []
           } catch (err) {
-            console.error(`Failed to get recommendations for booking ${booking.booking_id}:`, err)
-            newRecommendations[booking.booking_id] = []
+            console.error(`Failed to get recommendations for booking ${bookingId}:`, err)
+            newRecommendations[bookingId] = []
           }
         })
       )
