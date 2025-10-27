@@ -141,16 +141,23 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         .count()
     )
 
-    # Unassigned bookings
-    unassigned = (
+    # Unassigned trips (count delivery + pickup separately)
+    active_bookings = (
         db.query(Booking)
-        .filter(Booking.assigned_driver_id.is_(None))
         .filter(Booking.status.notin_([
             BookingStatus.CANCELLED.value,
             BookingStatus.COMPLETED.value
         ]))
-        .count()
+        .all()
     )
+
+    # Count trips without drivers
+    unassigned = 0
+    for booking in active_bookings:
+        if booking.assigned_driver_id is None:
+            unassigned += 1  # Delivery trip unassigned
+        if booking.pickup_driver_id is None:
+            unassigned += 1  # Pickup trip unassigned
 
     # Total conflicts
     conflicts = detect_all_conflicts(db)
@@ -227,25 +234,27 @@ async def update_booking(
 @router.get("/drivers/unassigned-bookings")
 async def get_unassigned_bookings(db: Session = Depends(get_db)):
     """
-    Get all bookings without assigned drivers.
+    Get all unassigned trips (delivery and pickup) that need driver assignment.
 
-    Helps admin identify bookings that need driver assignment.
+    Returns trips, not bookings. A booking can generate up to 2 trips:
+    - Delivery trip (if assigned_driver_id is NULL)
+    - Pickup trip (if pickup_driver_id is NULL)
 
     Returns:
-        List of unassigned bookings
+        List of unassigned trips with tripType field
 
     Example:
         GET /api/admin/drivers/unassigned-bookings
     """
     from backend.database.models import BookingStatus
 
-    unassigned = (
+    # Get all active bookings
+    bookings = (
         db.query(Booking)
         .options(
             joinedload(Booking.customer),
             joinedload(Booking.booking_items)
         )
-        .filter(Booking.assigned_driver_id.is_(None))
         .filter(Booking.status.notin_([
             BookingStatus.CANCELLED.value,
             BookingStatus.COMPLETED.value
@@ -254,18 +263,37 @@ async def get_unassigned_bookings(db: Session = Depends(get_db)):
         .all()
     )
 
-    return {
-        "total": len(unassigned),
-        "bookings": [
-            {
+    # Build list of unassigned trips
+    trips = []
+    for booking in bookings:
+        # Check if delivery driver is unassigned
+        if booking.assigned_driver_id is None:
+            trips.append({
                 "booking_id": booking.booking_id,
                 "order_number": booking.order_number,
                 "customer_name": booking.customer.name,
                 "delivery_date": str(booking.delivery_date),
                 "items_count": len(booking.booking_items),
-            }
-            for booking in unassigned
-        ],
+                "tripType": "delivery",
+                "delivery_address": booking.delivery_address,
+            })
+
+        # Check if pickup driver is unassigned
+        if booking.pickup_driver_id is None:
+            trips.append({
+                "booking_id": booking.booking_id,
+                "order_number": booking.order_number,
+                "customer_name": booking.customer.name,
+                "delivery_date": str(booking.delivery_date),
+                "pickup_date": str(booking.pickup_date) if booking.pickup_date else None,
+                "items_count": len(booking.booking_items),
+                "tripType": "pickup",
+                "delivery_address": booking.delivery_address,
+            })
+
+    return {
+        "total": len(trips),
+        "trips": trips,
     }
 
 

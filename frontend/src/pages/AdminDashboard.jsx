@@ -99,7 +99,9 @@ export default function AdminDashboard() {
       setDrivers(driversData)
       setStats(statsData)
       setConflicts(conflictsData.conflicts || [])
-      setUnassignedBookings(unassignedData)
+      // Extract trips from backend response (handles multiple formats)
+      const trips = unassignedData.trips || unassignedData.bookings || unassignedData || []
+      setUnassignedBookings(trips)
       setDriverWorkload(workloadData.drivers || [])
     } catch (err) {
       setError('Failed to load dashboard data')
@@ -139,31 +141,8 @@ export default function AdminDashboard() {
   const calendarDays = generateCalendarDays(selectedDate, bookings)
   const selectedDayBookings = getBookingsForDate(bookings, selectedDate)
 
-  // Calculate unassigned trips (delivery + pickup separately)
-  const getUnassignedTrips = () => {
-    const trips = []
-    bookings.forEach(booking => {
-      // Check if delivery driver is unassigned
-      if (!booking.assigned_driver_id && booking.status !== 'cancelled' && booking.status !== 'completed') {
-        trips.push({
-          ...booking,
-          tripType: 'delivery',
-          date: booking.delivery_date
-        })
-      }
-      // Check if pickup driver is unassigned
-      if (!booking.pickup_driver_id && booking.status !== 'cancelled' && booking.status !== 'completed') {
-        trips.push({
-          ...booking,
-          tripType: 'pickup',
-          date: booking.pickup_date
-        })
-      }
-    })
-    return trips
-  }
-
-  const unassignedTrips = getUnassignedTrips()
+  // Use pre-calculated trips from backend (includes tripType field)
+  const unassignedTrips = unassignedBookings
 
   // Calculate revenue for bookings delivered this month
   const getMonthlyRevenue = () => {
