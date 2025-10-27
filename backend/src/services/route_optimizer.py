@@ -23,12 +23,14 @@ class Stop:
         time_window: Tuple[time, time],
         stop_type: str,
         booking_id: int,
+        coords: Optional[Tuple[float, float]] = None,
     ):
         self.address = address
         self.time_window = time_window
         self.stop_type = stop_type  # 'delivery' or 'pickup'
         self.booking_id = booking_id
-        self.coords = geocode_address(address)
+        # Use provided coordinates if available, otherwise geocode
+        self.coords = coords if coords else geocode_address(address)
 
 
 class DriverRoute:
@@ -116,6 +118,11 @@ def build_driver_route(
     route = DriverRoute(driver["id"], driver["name"], date)
 
     for booking in bookings:
+        # Get coordinates from booking if available
+        coords = None
+        if booking.get("delivery_lat") and booking.get("delivery_lng"):
+            coords = (booking["delivery_lat"], booking["delivery_lng"])
+
         # Add delivery stop if driver is assigned and date matches
         if (
             booking.get("delivery_driver_id") == driver["id"]
@@ -128,6 +135,7 @@ def build_driver_route(
                 time_window=(time(9, 0), time(17, 0)),
                 stop_type="delivery",
                 booking_id=booking["id"],
+                coords=coords,
             )
             route.add_stop(stop)
 
@@ -141,6 +149,7 @@ def build_driver_route(
                 time_window=(time(9, 0), time(17, 0)),
                 stop_type="pickup",
                 booking_id=booking["id"],
+                coords=coords,
             )
             route.add_stop(stop)
 
@@ -148,7 +157,7 @@ def build_driver_route(
 
 
 def calculate_route_disruption(
-    route: DriverRoute, new_address: str
+    route: DriverRoute, new_address: str, new_coords: Optional[Tuple[float, float]] = None
 ) -> float:
     """
     Calculate how much adding a new stop disrupts the driver's route.
@@ -156,14 +165,16 @@ def calculate_route_disruption(
     Args:
         route: Current driver route
         new_address: Address of new delivery
+        new_coords: Optional coordinates to use instead of geocoding
 
     Returns:
         Additional miles added to route (best insertion point)
     """
-    new_coords = geocode_address(new_address)
     if not new_coords:
-        logger.warning(f"Could not geocode address: {new_address}")
-        return float("inf")
+        new_coords = geocode_address(new_address)
+        if not new_coords:
+            logger.warning(f"Could not geocode address: {new_address}")
+            return float("inf")
 
     # If route is empty, no disruption
     if len(route.stops) == 0:
@@ -214,7 +225,7 @@ def calculate_route_disruption(
 
 
 def calculate_distance_to_address(
-    route: DriverRoute, target_address: str
+    route: DriverRoute, target_address: str, target_coords: Optional[Tuple[float, float]] = None
 ) -> float:
     """
     Calculate closest distance from driver's route to target address.
@@ -222,13 +233,15 @@ def calculate_distance_to_address(
     Args:
         route: Driver's current route
         target_address: Address to check distance to
+        target_coords: Optional coordinates to use instead of geocoding
 
     Returns:
         Distance in miles to closest stop (0.0 if route is empty)
     """
-    target_coords = geocode_address(target_address)
     if not target_coords:
-        return float("inf")
+        target_coords = geocode_address(target_address)
+        if not target_coords:
+            return float("inf")
 
     # If driver has no stops, return 0 (they're available for any location)
     if len(route.stops) == 0:
@@ -292,6 +305,11 @@ def recommend_drivers(
     pickup_date = new_booking.get("pickup_date")
     delivery_address = new_booking.get("delivery_address")
 
+    # Get coordinates from booking if available
+    new_coords = None
+    if new_booking.get("delivery_lat") and new_booking.get("delivery_lng"):
+        new_coords = (new_booking["delivery_lat"], new_booking["delivery_lng"])
+
     if not delivery_date or not delivery_address:
         logger.error("Booking missing delivery_date or delivery_address")
         return []
@@ -310,9 +328,9 @@ def recommend_drivers(
         if has_time_conflict(route, delivery_date, pickup_date):
             continue
 
-        # Calculate metrics
-        disruption = calculate_route_disruption(route, delivery_address)
-        distance = calculate_distance_to_address(route, delivery_address)
+        # Calculate metrics using provided coordinates
+        disruption = calculate_route_disruption(route, delivery_address, new_coords)
+        distance = calculate_distance_to_address(route, delivery_address, new_coords)
 
         # Handle cases where geocoding failed
         if disruption == float("inf") or distance == float("inf"):

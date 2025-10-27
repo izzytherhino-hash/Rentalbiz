@@ -402,6 +402,8 @@ async def get_driver_recommendations(booking_id: str, db: Session = Depends(get_
             "delivery_date": str(b.delivery_date),
             "pickup_date": str(b.pickup_date),
             "delivery_address": b.delivery_address,
+            "delivery_lat": float(b.delivery_lat) if b.delivery_lat else None,
+            "delivery_lng": float(b.delivery_lng) if b.delivery_lng else None,
             "delivery_driver_id": b.assigned_driver_id,
             "pickup_driver_id": b.pickup_driver_id
         }
@@ -412,7 +414,9 @@ async def get_driver_recommendations(booking_id: str, db: Session = Depends(get_
         "id": booking.booking_id,
         "delivery_date": str(booking.delivery_date),
         "pickup_date": str(booking.pickup_date),
-        "delivery_address": booking.delivery_address
+        "delivery_address": booking.delivery_address,
+        "delivery_lat": float(booking.delivery_lat) if booking.delivery_lat else None,
+        "delivery_lng": float(booking.delivery_lng) if booking.delivery_lng else None
     }
 
     # Get recommendations
