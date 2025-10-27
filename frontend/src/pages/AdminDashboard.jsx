@@ -1487,6 +1487,7 @@ export default function AdminDashboard() {
                                 <span className="px-2 py-1 text-xs font-medium rounded-full border bg-purple-50 border-purple-400 text-purple-800 flex items-center gap-1 w-fit">
                                   <span className="text-sm">✨</span>
                                   {topRecommendation.driver_name}
+                                  <span className="ml-1 text-purple-600">({topRecommendation.score})</span>
                                 </span>
                                 <span className="text-xs text-gray-500">
                                   {topRecommendation.reason}
