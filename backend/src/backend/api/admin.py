@@ -841,3 +841,190 @@ async def update_driver_performance(db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating driver performance: {str(e)}"
         )
+
+
+@router.post("/add-service-items")
+async def add_service_items(db: Session = Depends(get_db)):
+    """
+    Add 5 new service items to the database without losing existing data.
+
+    This endpoint adds:
+    - WiFi Rental
+    - Face Painting Service
+    - Ice Cream Truck
+    - Taco Truck
+    - Tent Sleep Over Party
+
+    Skips items that already exist (non-destructive).
+
+    Returns:
+        dict: Summary of added and skipped items
+    """
+    from decimal import Decimal
+    from uuid import uuid4
+    from backend.database.models import InventoryItem, InventoryPhoto, Warehouse, InventoryStatus
+
+    try:
+        # Get warehouses
+        warehouses = db.query(Warehouse).all()
+        if not warehouses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No warehouses found. Please seed warehouses first."
+            )
+
+        warehouse_a = warehouses[0]
+        warehouse_b = warehouses[1] if len(warehouses) > 1 else warehouse_a
+
+        # Define service items with their photos
+        service_items = [
+            {
+                "name": "WiFi Rental",
+                "category": "Services",
+                "base_price": Decimal("100.00"),
+                "requires_power": True,
+                "min_space_sqft": 0,
+                "allowed_surfaces": "grass,concrete,asphalt,artificial_turf,indoor",
+                "default_warehouse_id": warehouse_a.warehouse_id,
+                "current_warehouse_id": warehouse_a.warehouse_id,
+                "status": InventoryStatus.AVAILABLE.value,
+                "description": "Professional-grade mobile WiFi hotspot rental. Perfect for outdoor events, parties, and gatherings. Provides reliable high-speed internet for up to 50 devices.",
+                "photos": [
+                    {"image_url": "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=1200&h=800&fit=crop&q=85", "display_order": 0, "is_thumbnail": True},
+                    {"image_url": "https://images.unsplash.com/photo-1606904825846-647eb07f5be2?w=1200&h=800&fit=crop&q=85", "display_order": 1, "is_thumbnail": False},
+                ]
+            },
+            {
+                "name": "Face Painting Service",
+                "category": "Services",
+                "base_price": Decimal("150.00"),
+                "requires_power": False,
+                "min_space_sqft": 25,
+                "allowed_surfaces": "grass,concrete,asphalt,artificial_turf,indoor",
+                "default_warehouse_id": warehouse_a.warehouse_id,
+                "current_warehouse_id": warehouse_a.warehouse_id,
+                "status": InventoryStatus.AVAILABLE.value,
+                "description": "Professional face painting artist for your event. Includes all supplies and can paint 15-20 faces per hour with fun designs for kids and adults.",
+                "photos": [
+                    {"image_url": "https://images.unsplash.com/photo-1522075782449-e45a34f1ddfb?w=1200&h=800&fit=crop&q=85", "display_order": 0, "is_thumbnail": True},
+                    {"image_url": "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=1200&h=800&fit=crop&q=85", "display_order": 1, "is_thumbnail": False},
+                ]
+            },
+            {
+                "name": "Ice Cream Truck",
+                "category": "Services",
+                "base_price": Decimal("400.00"),
+                "requires_power": False,
+                "min_space_sqft": 200,
+                "allowed_surfaces": "concrete,asphalt",
+                "default_warehouse_id": warehouse_b.warehouse_id,
+                "current_warehouse_id": warehouse_b.warehouse_id,
+                "status": InventoryStatus.AVAILABLE.value,
+                "description": "Fully stocked ice cream truck rental for 2 hours. Includes variety of ice cream treats, music, and friendly service. Perfect for birthday parties and community events.",
+                "photos": [
+                    {"image_url": "https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=1200&h=800&fit=crop&q=85", "display_order": 0, "is_thumbnail": True},
+                    {"image_url": "https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?w=1200&h=800&fit=crop&q=85", "display_order": 1, "is_thumbnail": False},
+                ]
+            },
+            {
+                "name": "Taco Truck",
+                "category": "Services",
+                "base_price": Decimal("600.00"),
+                "requires_power": False,
+                "min_space_sqft": 300,
+                "allowed_surfaces": "concrete,asphalt",
+                "default_warehouse_id": warehouse_b.warehouse_id,
+                "current_warehouse_id": warehouse_b.warehouse_id,
+                "status": InventoryStatus.AVAILABLE.value,
+                "description": "Authentic taco truck catering service. Includes professional chef, all ingredients, and service for up to 50 guests. Choice of meat, vegetarian, and vegan options.",
+                "photos": [
+                    {"image_url": "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=1200&h=800&fit=crop&q=85", "display_order": 0, "is_thumbnail": True},
+                    {"image_url": "https://images.unsplash.com/photo-1613514785940-daed07799d9b?w=1200&h=800&fit=crop&q=85", "display_order": 1, "is_thumbnail": False},
+                ]
+            },
+            {
+                "name": "Tent Sleep Over Party",
+                "category": "Services",
+                "base_price": Decimal("350.00"),
+                "requires_power": False,
+                "min_space_sqft": 400,
+                "allowed_surfaces": "grass,indoor",
+                "default_warehouse_id": warehouse_a.warehouse_id,
+                "current_warehouse_id": warehouse_a.warehouse_id,
+                "status": InventoryStatus.AVAILABLE.value,
+                "description": "Adorable teepee tent setup for the ultimate camping-themed sleepover party. Includes 4-6 decorated teepees with cozy bedding, fairy lights, and themed decorations. Perfect for kids' slumber parties and indoor camping experiences.",
+                "photos": [
+                    {"image_url": "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=1200&h=800&fit=crop&q=85", "display_order": 0, "is_thumbnail": True},
+                    {"image_url": "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=1200&h=800&fit=crop&q=85", "display_order": 1, "is_thumbnail": False},
+                ]
+            },
+        ]
+
+        added_count = 0
+        skipped_count = 0
+        added_items = []
+        skipped_items = []
+
+        for item_data in service_items:
+            # Check if item already exists
+            existing = db.query(InventoryItem).filter(
+                InventoryItem.name == item_data["name"]
+            ).first()
+
+            if existing:
+                skipped_items.append(item_data["name"])
+                skipped_count += 1
+                continue
+
+            # Extract photos from item data
+            photos_data = item_data.pop("photos")
+
+            # Create inventory item
+            item = InventoryItem(
+                inventory_item_id=str(uuid4()),
+                **item_data
+            )
+            db.add(item)
+            db.flush()  # Get the inventory_item_id
+
+            # Add photos
+            for photo_data in photos_data:
+                photo = InventoryPhoto(
+                    photo_id=str(uuid4()),
+                    inventory_item_id=item.inventory_item_id,
+                    **photo_data
+                )
+                db.add(photo)
+
+            added_items.append(item_data["name"])
+            added_count += 1
+
+        db.commit()
+
+        # Get final counts
+        total_items = db.query(InventoryItem).count()
+        service_items_count = db.query(InventoryItem).filter(
+            InventoryItem.category == "Services"
+        ).count()
+        total_photos = db.query(InventoryPhoto).count()
+
+        return {
+            "success": True,
+            "message": f"Added {added_count} new service items",
+            "added_items": added_items,
+            "skipped_items": skipped_items,
+            "summary": {
+                "added": added_count,
+                "skipped": skipped_count,
+                "total_inventory_items": total_items,
+                "total_service_items": service_items_count,
+                "total_photos": total_photos
+            }
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error adding service items: {str(e)}"
+        )
