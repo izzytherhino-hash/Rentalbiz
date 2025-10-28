@@ -10,7 +10,7 @@ Contains core algorithms for:
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Dict, Any
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from backend.database.models import (
     InventoryItem,
@@ -45,7 +45,9 @@ def filter_available_items(
         >>> items = filter_available_items(db, 400, "grass", True)
         >>> # Returns items that fit in 400 sqft grass area with power
     """
-    query = db.query(InventoryItem).filter(InventoryItem.status == "available")
+    query = db.query(InventoryItem).options(joinedload(InventoryItem.photos)).filter(
+        InventoryItem.status == "available"
+    )
 
     all_items = query.all()
     filtered_items = []

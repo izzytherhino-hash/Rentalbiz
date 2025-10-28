@@ -4,6 +4,7 @@ import { lazy, Suspense } from 'react'
 // Lazy load all pages for better performance
 const Landing = lazy(() => import('./pages/Landing'))
 const CustomerBooking = lazy(() => import('./pages/CustomerBooking'))
+const OrderConfirmation = lazy(() => import('./pages/OrderConfirmation'))
 const DriverDashboard = lazy(() => import('./pages/DriverDashboard'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 
@@ -26,6 +27,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/book" element={<CustomerBooking />} />
+          <Route path="/confirmation" element={<OrderConfirmation />} />
           <Route path="/driver" element={<DriverDashboard />} />
           <Route path="/admin" element={<AdminDashboard />} />
         </Routes>

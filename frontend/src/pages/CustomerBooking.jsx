@@ -1,153 +1,166 @@
 import { useState, useEffect, useRef } from 'react'
-import { CheckCircle } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { ShoppingCart, X, Calendar, AlertCircle, Plus, Minus } from 'lucide-react'
 import { bookingAPI, inventoryAPI } from '../services/api'
-
-const areaSizes = [
-  { label: '10ft × 10ft', sublabel: 'Small', value: 100 },
-  { label: '15ft × 15ft', sublabel: 'Medium', value: 225 },
-  { label: '20ft × 20ft', sublabel: 'Large', value: 400 },
-  { label: '30ft × 20ft', sublabel: 'Extra Large', value: 600 },
-  { label: '40ft × 30ft', sublabel: 'Huge', value: 1200 },
-]
-
-const surfaceTypes = [
-  { value: 'grass', label: 'Grass' },
-  { value: 'concrete', label: 'Concrete' },
-  { value: 'asphalt', label: 'Asphalt' },
-  { value: 'artificial_turf', label: 'Artificial Turf' },
-  { value: 'indoor', label: 'Indoor' },
-]
+import ItemAvailabilityCalendar from '../components/ItemAvailabilityCalendar'
 
 export default function CustomerBooking() {
-  const [step, setStep] = useState(1)
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // Main state
+  const [items, setItems] = useState([])
+  const [cart, setCart] = useState([]) // Cart items: [{item, quantity}]
+  const [selectedItem, setSelectedItem] = useState(null) // For modal
+  const [modalDates, setModalDates] = useState({ delivery: null, pickup: null }) // Date selection in modal
+
+  // Booking flow state
+  const [bookingStage, setBookingStage] = useState('browse') // 'browse', 'dates', 'customer', 'complete'
   const [deliveryDate, setDeliveryDate] = useState('')
   const [pickupDate, setPickupDate] = useState('')
-  const [partyDetails, setPartyDetails] = useState({
-    areaSize: null,
-    surface: '',
-    hasPower: null,
-  })
-  const [availableItems, setAvailableItems] = useState([])
-  const [selectedItems, setSelectedItems] = useState([])
-  const [quantities, setQuantities] = useState({})
+  const [availabilityChecked, setAvailabilityChecked] = useState(false)
+  const [unavailableItems, setUnavailableItems] = useState([])
+
+  // Customer info
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     email: '',
     phone: '',
     address: '',
-    addressDetails: null,
   })
-  const [showValidation, setShowValidation] = useState(false)
+
+  // UI state
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [bookingConfirmation, setBookingConfirmation] = useState(null)
+  const [filterCategory, setFilterCategory] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState('name')
+
+  // Google Maps refs
   const addressInputRef = useRef(null)
   const autocompleteRef = useRef(null)
 
-  // Load Google Maps script
+  // Load items on mount
   useEffect(() => {
-    const loadGoogleMapsScript = () => {
-      if (window.google && window.google.maps) {
-        return Promise.resolve()
-      }
+    loadItems()
 
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script')
-        const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'placeholder_google_maps_key'
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`
-        script.async = true
-        script.defer = true
-        script.onload = resolve
-        script.onerror = reject
-        document.head.appendChild(script)
-      })
-    }
+    // Check URL params
+    const params = new URLSearchParams(location.search)
+    const categoryParam = params.get('category')
+    const searchParam = params.get('search')
 
-    loadGoogleMapsScript().catch(err => {
-      console.warn('Google Maps not loaded (using placeholder key):', err)
-    })
-  }, [])
+    if (categoryParam) setFilterCategory(categoryParam)
+    if (searchParam) setSearchQuery(searchParam)
+  }, [location.search])
 
-  // Initialize autocomplete when on step 4
+  // Load Google Maps for address autocomplete
   useEffect(() => {
-    if (step === 4 && addressInputRef.current && window.google && window.google.maps && !autocompleteRef.current) {
-      try {
-        autocompleteRef.current = new window.google.maps.places.Autocomplete(
-          addressInputRef.current,
-          {
-            fields: ['formatted_address', 'geometry', 'address_components', 'place_id'],
-            types: ['address'],
-          }
-        )
-
-        autocompleteRef.current.addListener('place_changed', () => {
-          const place = autocompleteRef.current.getPlace()
-
-          if (place.geometry) {
-            setCustomerInfo(prev => ({
-              ...prev,
-              address: place.formatted_address || '',
-              addressDetails: {
-                lat: place.geometry.location.lat(),
-                lng: place.geometry.location.lng(),
-                placeId: place.place_id,
-                formatted: place.formatted_address,
-              }
-            }))
-          }
-        })
-      } catch (err) {
-        console.warn('Autocomplete not initialized (using placeholder key):', err)
+    if (bookingStage === 'customer' && addressInputRef.current && !autocompleteRef.current) {
+      const script = document.createElement('script')
+      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAEMxuTCLs_TfO_bqjC93vvMGPxNzZfp3U&libraries=places`
+      script.async = true
+      script.onload = () => {
+        if (window.google && addressInputRef.current) {
+          autocompleteRef.current = new window.google.maps.places.Autocomplete(
+            addressInputRef.current,
+            { types: ['address'] }
+          )
+        }
       }
+      document.body.appendChild(script)
     }
-  }, [step])
+  }, [bookingStage])
 
-  // Fetch filtered items from backend
-  const fetchFilteredItems = async () => {
+  const loadItems = async () => {
     setLoading(true)
     setError(null)
     try {
-      const items = await bookingAPI.filterItems(
-        partyDetails.areaSize,
-        partyDetails.surface,
-        partyDetails.hasPower
-      )
-      setAvailableItems(items)
+      const data = await inventoryAPI.listItems()
+      setItems(data)
     } catch (err) {
-      setError('Failed to load available items. Please try again.')
-      console.error('Error fetching items:', err)
+      setError('Failed to load items')
+      console.error(err)
     } finally {
       setLoading(false)
     }
   }
 
-  const total = selectedItems.reduce((sum, itemId) => {
-    const item = availableItems.find(i => i.inventory_item_id === itemId)
-    const quantity = quantities[itemId] || 1
-    return sum + ((item?.base_price || 0) * quantity)
-  }, 0)
+  // Filter and sort items
+  const getFilteredItems = () => {
+    let filtered = [...items]
 
-  const toggleItem = (itemId) => {
-    if (selectedItems.includes(itemId)) {
-      setSelectedItems(selectedItems.filter(id => id !== itemId))
-      const newQuantities = { ...quantities }
-      delete newQuantities[itemId]
-      setQuantities(newQuantities)
+    if (filterCategory !== 'all') {
+      filtered = filtered.filter(item => item.category === filterCategory)
+    }
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(item =>
+        item.name.toLowerCase().includes(query) ||
+        (item.description && item.description.toLowerCase().includes(query))
+      )
+    }
+
+    filtered.sort((a, b) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name)
+      if (sortBy === 'price') return parseFloat(a.base_price) - parseFloat(b.base_price)
+      return 0
+    })
+
+    return filtered
+  }
+
+  // Cart functions
+  const addToCart = (item, quantity = 1, dates = null) => {
+    // Require dates when adding to cart
+    if (!dates || !dates.delivery || !dates.pickup) {
+      setError('Please select delivery and pickup dates first')
+      return
+    }
+
+    const existing = cart.find(c => c.item.inventory_item_id === item.inventory_item_id)
+    if (existing) {
+      setCart(cart.map(c =>
+        c.item.inventory_item_id === item.inventory_item_id
+          ? { ...c, quantity: c.quantity + quantity, dates }
+          : c
+      ))
     } else {
-      setSelectedItems([...selectedItems, itemId])
-      setQuantities({ ...quantities, [itemId]: 1 })
+      setCart([...cart, { item, quantity, dates }])
     }
+    setSelectedItem(null)
+    setModalDates({ delivery: null, pickup: null }) // Reset for next item
+    setError(null)
   }
 
-  const updateQuantity = (itemId, quantity) => {
-    if (quantity > 0) {
-      setQuantities({ ...quantities, [itemId]: quantity })
-    }
+  const removeFromCart = (itemId) => {
+    setCart(cart.filter(c => c.item.inventory_item_id !== itemId))
   }
 
-  const handleCreateBooking = async () => {
-    if (!customerInfo.name || !customerInfo.email || !customerInfo.phone || !customerInfo.address) {
-      setShowValidation(true)
+  const getCartTotal = () => {
+    return cart.reduce((sum, c) => sum + (parseFloat(c.item.base_price) * c.quantity), 0)
+  }
+
+  // Proceed to checkout (skip date selection since dates are per-item now)
+  const proceedToCheckout = () => {
+    if (cart.length === 0) {
+      setError('Please add items to your cart first')
+      return
+    }
+    // Verify all cart items have dates
+    const itemsWithoutDates = cart.filter(c => !c.dates || !c.dates.delivery || !c.dates.pickup)
+    if (itemsWithoutDates.length > 0) {
+      setError('All items must have rental dates selected')
+      return
+    }
+    setBookingStage('customer')
+    setError(null)
+  }
+
+  // Check availability for selected dates
+  const checkAvailability = async () => {
+    if (!deliveryDate || !pickupDate) {
+      setError('Please select both delivery and pickup dates')
       return
     }
 
@@ -155,525 +168,425 @@ export default function CustomerBooking() {
     setError(null)
 
     try {
-      // Create booking data
-      const bookingData = {
-        delivery_date: deliveryDate,
-        pickup_date: pickupDate,
-        delivery_address: customerInfo.address,
-        delivery_latitude: customerInfo.addressDetails?.lat || null,
-        delivery_longitude: customerInfo.addressDetails?.lng || null,
-        customer_name: customerInfo.name,
-        customer_email: customerInfo.email,
-        customer_phone: customerInfo.phone,
-        items: selectedItems.map(itemId => ({
-          inventory_item_id: itemId,
-          quantity: quantities[itemId] || 1
-        })),
-        notes: `Party space: ${areaSizes.find(s => s.value === partyDetails.areaSize)?.label}, Surface: ${surfaceTypes.find(s => s.value === partyDetails.surface)?.label}, Power: ${partyDetails.hasPower ? 'Available' : 'Not Available'}`
+      const itemIds = cart.map(c => c.item.inventory_item_id).filter(id => id != null)
+      if (itemIds.length === 0) {
+        setError('No valid items in cart')
+        setLoading(false)
+        return
       }
+      const result = await bookingAPI.checkAvailability(itemIds, deliveryDate, pickupDate)
 
-      // Use the simplified customer booking endpoint
-      const result = await bookingAPI.createCustomerBooking(bookingData)
-      setBookingConfirmation(result)
-      setStep(5)
+      // result.conflicts contains unavailable items
+      const unavailable = result.conflicts || []
+      setUnavailableItems(unavailable.map(c => c.inventory_item_id))
+      setAvailabilityChecked(true)
+
+      if (unavailable.length === cart.length) {
+        setError('None of your cart items are available for these dates. Please choose different dates.')
+      } else if (unavailable.length > 0) {
+        setError(`${unavailable.length} item(s) unavailable for these dates. You can proceed with the available items.`)
+      } else {
+        setBookingStage('customer')
+      }
     } catch (err) {
-      setError(err.message || 'Failed to create booking. Please try again.')
-      console.error('Error creating booking:', err)
+      setError('Failed to check availability')
+      console.error(err)
     } finally {
       setLoading(false)
     }
   }
 
-  const canProceedFromDetails = partyDetails.areaSize !== null &&
-                                 partyDetails.surface !== '' &&
-                                 partyDetails.hasPower !== null
+  // Remove unavailable items and proceed
+  const proceedWithAvailable = () => {
+    setCart(cart.filter(c => !unavailableItems.includes(c.item.inventory_item_id)))
+    setUnavailableItems([])
+    setAvailabilityChecked(false)
+    setBookingStage('customer')
+    setError(null)
+  }
 
-  const handleShowItems = () => {
-    if (canProceedFromDetails) {
-      fetchFilteredItems()
-      setStep(3)
-      setShowValidation(false)
-    } else {
-      setShowValidation(true)
+  // Submit booking
+  const submitBooking = async () => {
+    if (!customerInfo.name || !customerInfo.email || !customerInfo.phone || !customerInfo.address) {
+      setError('Please fill in all customer information')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Extract dates from cart items (all items should have the same rental period)
+      const firstItemDates = cart[0]?.dates
+      if (!firstItemDates || !firstItemDates.delivery || !firstItemDates.pickup) {
+        setError('Invalid booking dates. Please try again.')
+        setLoading(false)
+        return
+      }
+
+      const bookingData = {
+        customer_name: customerInfo.name,
+        customer_email: customerInfo.email,
+        customer_phone: customerInfo.phone,
+        delivery_address: customerInfo.address,
+        delivery_date: firstItemDates.delivery,
+        pickup_date: firstItemDates.pickup,
+        items: cart.map(c => ({
+          inventory_item_id: c.item.inventory_item_id,
+          quantity: c.quantity,
+        })),
+      }
+
+      const result = await bookingAPI.createCustomerBooking(bookingData)
+
+      // Navigate to confirmation
+      navigate('/confirmation', { state: { booking: result } })
+    } catch (err) {
+      setError(err.message || 'Failed to create booking')
+      console.error(err)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const canProceedFromDates = deliveryDate && pickupDate && new Date(pickupDate) >= new Date(deliveryDate)
+  // Get unique categories
+  const categories = ['all', ...new Set(items.map(item => item.category).filter(Boolean))]
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-          <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-light text-center text-gray-800 tracking-wide mb-2">
-            Book Your Partay
+    <div className="min-h-screen bg-gray-50">
+      {/* Header with Cart */}
+      <div className="bg-white shadow-sm sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <h1 className="text-2xl font-serif font-light text-gray-800">
+            {bookingStage === 'browse' && 'Browse Equipment'}
+            {bookingStage === 'dates' && 'Select Event Dates'}
+            {bookingStage === 'customer' && 'Your Information'}
           </h1>
-          <p className="text-center text-gray-500 text-xs sm:text-sm tracking-widest uppercase">No stress. No hassle. Just fun.</p>
+
+          <button
+            onClick={() => setBookingStage(cart.length > 0 ? 'dates' : 'browse')}
+            className="flex items-center gap-2 bg-yellow-400 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-yellow-500 transition-colors relative"
+          >
+            <ShoppingCart className="w-5 h-5" />
+            <span>Cart ({cart.length})</span>
+            {cart.length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
+                {cart.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        {/* Progress bar */}
-        <div className="mb-8 sm:mb-12">
-          <div className="flex items-center justify-between max-w-2xl mx-auto">
-            {[1, 2, 3, 4].map((s, idx) => (
-              <div key={s} className="flex items-center flex-1">
-                <div className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 transition-all ${
-                  step >= s ? 'border-yellow-400 bg-yellow-400 text-gray-800' : 'border-gray-300 bg-white text-gray-400'
-                }`}>
-                  <span className="text-xs sm:text-sm font-medium">{s}</span>
-                </div>
-                {idx < 3 && (
-                  <div className="flex-1 h-0.5 mx-1 sm:mx-3 bg-gray-200">
-                    <div className={`h-full transition-all ${step > s ? 'bg-yellow-400' : 'bg-gray-200'}`}></div>
-                  </div>
-                )}
-              </div>
-            ))}
+      {/* Error Display */}
+      {error && (
+        <div className="max-w-7xl mx-auto px-4 mt-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-red-800">{error}</p>
+            </div>
+            <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800">
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
+      )}
 
-        {/* Error display */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 text-sm">
-            {error}
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        {bookingStage === 'browse' && (
+          <div>
+            {/* Filters */}
+            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                  <select
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
+                  >
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat === 'all' ? 'All Categories' : cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search equipment..."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
+                  >
+                    <option value="name">Name</option>
+                    <option value="price">Price</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Items Grid */}
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="inline-block w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+                <p className="mt-4 text-gray-600">Loading equipment...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {getFilteredItems().map(item => (
+                  <div key={item.inventory_item_id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <div className="aspect-video bg-gray-200 relative">
+                      {item.photos?.[0]?.image_url && (
+                        <img src={item.photos[0].image_url} alt={item.name} className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-semibold text-lg text-gray-800 mb-2">{item.name}</h3>
+                      <p className="text-sm text-gray-600 mb-3 line-clamp-2">{item.description}</p>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-2xl font-bold text-gray-900">
+                          ${parseFloat(item.base_price).toFixed(2)}
+                        </span>
+                        <span className="text-sm text-gray-500">{item.category}</span>
+                      </div>
+                      <button
+                        onClick={() => setSelectedItem(item)}
+                        className="w-full bg-yellow-400 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-yellow-500 transition-colors"
+                      >
+                        View Details & Add to Cart
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Book Items Button */}
+            {cart.length > 0 && (
+              <div className="fixed bottom-6 right-6 z-50">
+                <button
+                  onClick={proceedToCheckout}
+                  className="bg-yellow-400 text-gray-800 px-8 py-4 rounded-full font-bold text-lg shadow-lg hover:bg-yellow-500 transition-colors flex items-center gap-2"
+                >
+                  Book {cart.length} Item{cart.length > 1 ? 's' : ''} (${getCartTotal().toFixed(2)})
+                  <Calendar className="w-6 h-6" />
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Main Content Card */}
-        <div className="bg-white rounded-sm border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-6 sm:p-8 lg:p-10">
-            {/* Step 1: Date Selection */}
-            {step === 1 && (
-              <div className="max-w-md mx-auto">
-                <h2 className="font-serif text-2xl sm:text-3xl font-light text-gray-800 mb-2 sm:mb-3">
-                  Select Your Dates
-                </h2>
-                <p className="text-gray-600 mb-6 sm:mb-8 text-sm">When do you need the equipment?</p>
+        {bookingStage === 'customer' && (
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-lg shadow-sm p-8">
+              <h2 className="text-2xl font-semibold text-gray-800 mb-6">Your Information</h2>
 
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2 tracking-wide uppercase">
-                    Delivery Date
-                  </label>
-                  <input
-                    type="date"
-                    value={deliveryDate}
-                    onChange={(e) => setDeliveryDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full p-4 border border-gray-300 text-lg mb-2 focus:outline-none focus:border-yellow-400 transition"
-                  />
-                </div>
-
-                <div className="mb-8">
-                  <label className="block text-sm font-medium text-gray-700 mb-2 tracking-wide uppercase">
-                    Pickup Date
-                  </label>
-                  <input
-                    type="date"
-                    value={pickupDate}
-                    onChange={(e) => setPickupDate(e.target.value)}
-                    min={deliveryDate || new Date().toISOString().split('T')[0]}
-                    className="w-full p-4 border border-gray-300 text-lg mb-2 focus:outline-none focus:border-yellow-400 transition"
-                  />
-                  {pickupDate && deliveryDate && new Date(pickupDate) < new Date(deliveryDate) && (
-                    <p className="text-red-500 text-xs mt-2">Pickup date must be on or after delivery date</p>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => setStep(2)}
-                  disabled={!canProceedFromDates}
-                  className="w-full bg-yellow-400 text-gray-800 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
-                >
-                  Continue
-                </button>
-              </div>
-            )}
-
-            {/* Step 2: Party Setup Details */}
-            {step === 2 && (
-              <div>
-                <h2 className="font-serif text-2xl sm:text-3xl font-light text-gray-800 mb-2 sm:mb-3">
-                  Your Party Space
-                </h2>
-                <p className="text-gray-600 mb-6 sm:mb-10 text-sm">Help us find the perfect fit</p>
-
-                {/* Area Size */}
-                <div className="mb-10">
-                  <label className={`block text-sm font-medium mb-4 tracking-wide uppercase ${
-                    showValidation && partyDetails.areaSize === null ? 'text-red-500' : 'text-gray-700'
-                  }`}>
-                    Party Area Size {showValidation && partyDetails.areaSize === null && <span className="text-red-500">*</span>}
-                  </label>
-                  <div className="grid grid-cols-1 gap-3">
-                    {areaSizes.map(size => (
-                      <button
-                        key={size.value}
-                        onClick={() => {
-                          setPartyDetails({...partyDetails, areaSize: size.value})
-                          setShowValidation(false)
-                        }}
-                        className={`p-4 border text-left transition ${
-                          partyDetails.areaSize === size.value
-                            ? 'border-yellow-400 bg-yellow-50'
-                            : showValidation && partyDetails.areaSize === null
-                            ? 'border-red-300 bg-red-50'
-                            : 'border-gray-200 hover:border-yellow-300'
-                        }`}
-                      >
-                        <span className="font-medium text-gray-800">{size.label}</span>
-                        <span className="text-gray-500 ml-2">({size.sublabel})</span>
-                      </button>
-                    ))}
-                  </div>
-                  {showValidation && partyDetails.areaSize === null && (
-                    <p className="text-red-500 text-xs mt-2">Please select a party area size</p>
-                  )}
-                </div>
-
-                {/* Surface Type */}
-                <div className="mb-10">
-                  <label className={`block text-sm font-medium mb-4 tracking-wide uppercase ${
-                    showValidation && partyDetails.surface === '' ? 'text-red-500' : 'text-gray-700'
-                  }`}>
-                    Surface Type {showValidation && partyDetails.surface === '' && <span className="text-red-500">*</span>}
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {surfaceTypes.map(surface => (
-                      <button
-                        key={surface.value}
-                        onClick={() => {
-                          setPartyDetails({...partyDetails, surface: surface.value})
-                          setShowValidation(false)
-                        }}
-                        className={`p-4 border text-center transition ${
-                          partyDetails.surface === surface.value
-                            ? 'border-yellow-400 bg-yellow-50'
-                            : showValidation && partyDetails.surface === ''
-                            ? 'border-red-300 bg-red-50'
-                            : 'border-gray-200 hover:border-yellow-300'
-                        }`}
-                      >
-                        <div className="text-sm font-medium text-gray-800">{surface.label}</div>
-                      </button>
-                    ))}
-                  </div>
-                  {showValidation && partyDetails.surface === '' && (
-                    <p className="text-red-500 text-xs mt-2">Please select a surface type</p>
-                  )}
-                </div>
-
-                {/* Power Access */}
-                <div className="mb-10">
-                  <label className={`block text-sm font-medium mb-4 tracking-wide uppercase ${
-                    showValidation && partyDetails.hasPower === null ? 'text-red-500' : 'text-gray-700'
-                  }`}>
-                    Power Outlet Nearby? {showValidation && partyDetails.hasPower === null && <span className="text-red-500">*</span>}
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => {
-                        setPartyDetails({...partyDetails, hasPower: true})
-                        setShowValidation(false)
-                      }}
-                      className={`p-4 border font-medium transition ${
-                        partyDetails.hasPower === true
-                          ? 'border-yellow-400 bg-yellow-50'
-                          : showValidation && partyDetails.hasPower === null
-                          ? 'border-red-300 bg-red-50'
-                          : 'border-gray-200 hover:border-yellow-300'
-                      }`}
-                    >
-                      Yes
-                    </button>
-                    <button
-                      onClick={() => {
-                        setPartyDetails({...partyDetails, hasPower: false})
-                        setShowValidation(false)
-                      }}
-                      className={`p-4 border font-medium transition ${
-                        partyDetails.hasPower === false
-                          ? 'border-yellow-400 bg-yellow-50'
-                          : showValidation && partyDetails.hasPower === null
-                          ? 'border-red-300 bg-red-50'
-                          : 'border-gray-200 hover:border-yellow-300'
-                      }`}
-                    >
-                      No
-                    </button>
-                  </div>
-                  {showValidation && partyDetails.hasPower === null && (
-                    <p className="text-red-500 text-xs mt-2">Please select whether power is available</p>
-                  )}
-                </div>
-
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => setStep(1)}
-                    className="flex-1 bg-gray-100 text-gray-700 py-4 text-sm font-medium tracking-wider uppercase hover:bg-gray-200 transition"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={handleShowItems}
-                    disabled={loading}
-                    className="flex-1 bg-yellow-400 text-gray-800 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 transition"
-                  >
-                    {loading ? 'Loading...' : 'Show Items'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Item Selection */}
-            {step === 3 && (
-              <div>
-                <h2 className="font-serif text-2xl sm:text-3xl font-light text-gray-800 mb-2 sm:mb-3">
-                  Available Items
-                </h2>
-                <p className="text-gray-600 mb-6 sm:mb-8 text-xs sm:text-sm">
-                  {deliveryDate && new Date(deliveryDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                  {pickupDate && ` - ${new Date(pickupDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
+              {/* Booking Summary */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <p className="text-sm text-gray-600 mb-2">
+                  Delivery: {new Date(deliveryDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
-
-                {loading ? (
-                  <div className="text-center py-12">
-                    <p className="text-gray-600">Loading available items...</p>
-                  </div>
-                ) : availableItems.length === 0 ? (
-                  <div className="text-center py-12">
-                    <p className="text-gray-600 mb-6">No items match your party setup.</p>
-                    <button
-                      onClick={() => setStep(2)}
-                      className="bg-yellow-400 text-gray-800 px-8 py-3 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 transition"
-                    >
-                      Adjust Details
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="bg-gray-50 border border-gray-200 p-6 mb-8 text-sm text-gray-600">
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <span className="font-medium text-gray-700">Area:</span> {areaSizes.find(s => s.value === partyDetails.areaSize)?.label}
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Surface:</span> {surfaceTypes.find(s => s.value === partyDetails.surface)?.label}
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Power:</span> {partyDetails.hasPower ? 'Available' : 'Not Available'}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                      {availableItems.map(item => (
-                        <div
-                          key={item.inventory_item_id}
-                          onClick={() => toggleItem(item.inventory_item_id)}
-                          className={`border cursor-pointer transition ${
-                            selectedItems.includes(item.inventory_item_id)
-                              ? 'border-yellow-400 bg-yellow-50'
-                              : 'border-gray-200 hover:border-yellow-300'
-                          }`}
-                        >
-                          <div className="p-6">
-                            <div className="flex items-start justify-between mb-4">
-                              <div className="flex-1">
-                                <h3 className="font-medium text-gray-800 mb-1">{item.name}</h3>
-                                <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">{item.category}</p>
-                                {item.description && (
-                                  <p className="text-sm text-gray-600 mb-3 leading-relaxed">{item.description}</p>
-                                )}
-                                <p className="text-xl font-light text-gray-800">${item.base_price}<span className="text-sm text-gray-500 ml-1">/ day</span></p>
-                              </div>
-                              {selectedItems.includes(item.inventory_item_id) && (
-                                <CheckCircle className="w-5 h-5 text-yellow-400" />
-                              )}
-                            </div>
-                            {selectedItems.includes(item.inventory_item_id) && (
-                              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
-                                <label className="text-sm text-gray-600">Quantity:</label>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={quantities[item.inventory_item_id] || 1}
-                                  onChange={(e) => updateQuantity(item.inventory_item_id, parseInt(e.target.value))}
-                                  className="w-20 p-2 border border-gray-300 text-center focus:outline-none focus:border-yellow-400"
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="border-t border-gray-200 pt-6 mb-8">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm uppercase tracking-wide text-gray-600">Total</span>
-                        <span className="font-serif text-3xl font-light text-gray-800">${total}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-4">
-                      <button
-                        onClick={() => setStep(2)}
-                        className="flex-1 bg-gray-100 text-gray-700 py-4 text-sm font-medium tracking-wider uppercase hover:bg-gray-200 transition"
-                      >
-                        Back
-                      </button>
-                      <button
-                        onClick={() => setStep(4)}
-                        disabled={selectedItems.length === 0}
-                        className="flex-1 bg-yellow-400 text-gray-800 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
-                      >
-                        Checkout
-                      </button>
-                    </div>
-                  </>
-                )}
+                <p className="text-sm text-gray-600 mb-3">
+                  Pickup: {new Date(pickupDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+                <p className="font-bold text-lg text-gray-900">
+                  Total: ${getCartTotal().toFixed(2)} for {cart.length} item{cart.length > 1 ? 's' : ''}
+                </p>
               </div>
-            )}
 
-            {/* Step 4: Customer Info */}
-            {step === 4 && (
-              <div>
-                <h2 className="font-serif text-2xl sm:text-3xl font-light text-gray-800 mb-2 sm:mb-3">
-                  Your Information
-                </h2>
-                <p className="text-gray-600 mb-6 sm:mb-10 text-sm">We'll send you all the details</p>
-
-                <div className="space-y-5 mb-10">
+              {/* Customer Form */}
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
                   <input
                     type="text"
-                    placeholder="Full Name"
                     value={customerInfo.name}
-                    onChange={(e) => setCustomerInfo({...customerInfo, name: e.target.value})}
-                    className="w-full p-4 border border-gray-300 text-sm focus:outline-none focus:border-yellow-400 transition"
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
+                    placeholder="John Smith"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                   <input
                     type="email"
-                    placeholder="Email Address"
                     value={customerInfo.email}
-                    onChange={(e) => setCustomerInfo({...customerInfo, email: e.target.value})}
-                    className="w-full p-4 border border-gray-300 text-sm focus:outline-none focus:border-yellow-400 transition"
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
+                    placeholder="john@example.com"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
                   <input
                     type="tel"
-                    placeholder="Phone Number"
                     value={customerInfo.phone}
-                    onChange={(e) => setCustomerInfo({...customerInfo, phone: e.target.value})}
-                    className="w-full p-4 border border-gray-300 text-sm focus:outline-none focus:border-yellow-400 transition"
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
+                    placeholder="(555) 123-4567"
                   />
-                  <div>
-                    <input
-                      ref={addressInputRef}
-                      type="text"
-                      placeholder="Start typing your delivery address..."
-                      value={customerInfo.address}
-                      onChange={(e) => setCustomerInfo({...customerInfo, address: e.target.value})}
-                      className="w-full p-4 border border-gray-300 text-sm focus:outline-none focus:border-yellow-400 transition"
-                    />
-                    <p className="text-xs text-gray-500 mt-2">Select an address from the dropdown for accurate delivery routing</p>
-                  </div>
                 </div>
 
-                <div className="bg-gray-50 border border-gray-200 p-6 mb-8">
-                  <h3 className="text-sm uppercase tracking-wide text-gray-700 mb-4 font-medium">Order Summary</h3>
-                  <p className="text-xs text-gray-600 mb-4">
-                    {deliveryDate && new Date(deliveryDate + 'T00:00:00').toLocaleDateString()} - {pickupDate && new Date(pickupDate + 'T00:00:00').toLocaleDateString()}
-                  </p>
-                  {selectedItems.map(itemId => {
-                    const item = availableItems.find(i => i.inventory_item_id === itemId)
-                    const quantity = quantities[itemId] || 1
-                    return (
-                      <div key={itemId} className="flex justify-between text-sm mb-2 text-gray-700">
-                        <span>{item?.name} {quantity > 1 && `(×${quantity})`}</span>
-                        <span>${(item?.base_price || 0) * quantity}</span>
-                      </div>
-                    )
-                  })}
-                  <div className="border-t border-gray-300 mt-4 pt-4 flex justify-between">
-                    <span className="text-sm uppercase tracking-wide text-gray-600">Total</span>
-                    <span className="font-serif text-2xl font-light text-gray-800">${total}</span>
-                  </div>
-                </div>
-
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => setStep(3)}
-                    className="flex-1 bg-gray-100 text-gray-700 py-4 text-sm font-medium tracking-wider uppercase hover:bg-gray-200 transition"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={handleCreateBooking}
-                    disabled={!customerInfo.name || !customerInfo.email || !customerInfo.phone || !customerInfo.address || loading}
-                    className="flex-1 bg-yellow-400 text-gray-800 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
-                  >
-                    {loading ? 'Processing...' : 'Complete Booking'}
-                  </button>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Address</label>
+                  <input
+                    ref={addressInputRef}
+                    type="text"
+                    value={customerInfo.address}
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, address: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
+                    placeholder="123 Main St, City, State ZIP"
+                  />
                 </div>
               </div>
-            )}
 
-            {/* Step 5: Confirmation */}
-            {step === 5 && bookingConfirmation && (
-              <div className="text-center py-8 sm:py-12">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-yellow-400 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
-                  <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-gray-800" />
-                </div>
-                <h2 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-light text-gray-800 mb-3 sm:mb-4">
-                  You're All Set!
-                </h2>
-                <p className="text-gray-600 mb-3 sm:mb-4 text-sm sm:text-base px-4">
-                  Thank you, {customerInfo.name}. We'll send confirmation to {customerInfo.email}
-                </p>
-                <p className="text-xs sm:text-sm text-gray-500 mb-6 sm:mb-10">
-                  Order Number: <span className="font-medium text-gray-700">{bookingConfirmation.order_number}</span>
-                </p>
-                <div className="bg-gray-50 border border-gray-200 p-6 sm:p-8 mb-8 sm:mb-10 text-left max-w-md mx-auto">
-                  <h3 className="text-sm uppercase tracking-wide text-gray-700 mb-4 font-medium">Booking Details</h3>
-                  <p className="text-sm text-gray-700 mb-2">
-                    <span className="font-medium">Delivery:</span> {new Date(deliveryDate + 'T00:00:00').toLocaleDateString()}
-                  </p>
-                  <p className="text-sm text-gray-700 mb-2">
-                    <span className="font-medium">Pickup:</span> {new Date(pickupDate + 'T00:00:00').toLocaleDateString()}
-                  </p>
-                  <p className="text-sm text-gray-700 mb-2">
-                    <span className="font-medium">Items:</span> {selectedItems.length}
-                  </p>
-                  <p className="text-sm text-gray-700 mb-2">
-                    <span className="font-medium">Total:</span> ${total}
-                  </p>
-                  <p className="text-sm text-gray-700 mb-2">
-                    <span className="font-medium">Status:</span> {bookingConfirmation.status}
-                  </p>
-                  <p className="text-sm text-gray-700">
-                    <span className="font-medium">Address:</span> {customerInfo.address}
-                  </p>
-                </div>
+              {/* Actions */}
+              <div className="flex gap-4">
                 <button
-                  onClick={() => {
-                    setStep(1)
-                    setDeliveryDate('')
-                    setPickupDate('')
-                    setPartyDetails({ areaSize: null, surface: '', hasPower: null })
-                    setSelectedItems([])
-                    setQuantities({})
-                    setCustomerInfo({ name: '', email: '', phone: '', address: '', addressDetails: null })
-                    setBookingConfirmation(null)
-                    setError(null)
-                  }}
-                  className="bg-yellow-400 text-gray-800 px-10 py-4 text-sm font-medium tracking-wider uppercase hover:bg-yellow-500 transition"
+                  onClick={() => setBookingStage('dates')}
+                  className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-yellow-400 transition-colors"
                 >
-                  Book Another Party
+                  Back
+                </button>
+
+                <button
+                  onClick={submitBooking}
+                  disabled={loading}
+                  className="flex-1 bg-yellow-400 text-gray-800 px-6 py-3 rounded-lg font-bold hover:bg-yellow-500 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Processing...' : 'Complete Booking'}
                 </button>
               </div>
-            )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Item Detail Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+              <h2 className="text-2xl font-semibold text-gray-800">{selectedItem.name}</h2>
+              <button onClick={() => setSelectedItem(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {selectedItem.photos?.[0]?.image_url && (
+                <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden mb-6">
+                  <img src={selectedItem.photos[0].image_url} alt={selectedItem.name} className="w-full h-full object-cover" />
+                </div>
+              )}
+
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-3xl font-bold text-gray-900">
+                    ${parseFloat(selectedItem.base_price).toFixed(2)}
+                  </span>
+                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                    {selectedItem.category}
+                  </span>
+                </div>
+
+                <p className="text-gray-700 mb-4">{selectedItem.description}</p>
+
+                {selectedItem.dimensions && (
+                  <p className="text-sm text-gray-600">
+                    <span className="font-semibold">Dimensions:</span> {selectedItem.dimensions}
+                  </p>
+                )}
+              </div>
+
+              {/* Availability Calendar */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Check Availability</h3>
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <ItemAvailabilityCalendar
+                    inventoryId={selectedItem.inventory_item_id}
+                    onDateSelect={setModalDates}
+                    selectedDates={modalDates}
+                  />
+                </div>
+                {modalDates.delivery && modalDates.pickup && (
+                  <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3">
+                    <p className="text-sm text-green-800">
+                      <span className="font-semibold">Selected Rental Period:</span>
+                      <br />
+                      Delivery: {new Date(modalDates.delivery).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      <br />
+                      Pickup: {new Date(modalDates.pickup).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Quantity Selector */}
+              <div className="flex items-center gap-4 mb-6">
+                <label className="text-sm font-medium text-gray-700">Quantity:</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const qty = (selectedItem.tempQty || 1) - 1
+                      setSelectedItem({ ...selectedItem, tempQty: Math.max(1, qty) })
+                    }}
+                    className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <span className="w-12 text-center font-semibold">{selectedItem.tempQty || 1}</span>
+                  <button
+                    onClick={() => {
+                      const qty = (selectedItem.tempQty || 1) + 1
+                      setSelectedItem({ ...selectedItem, tempQty: qty })
+                    }}
+                    className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Add to Cart Button */}
+              <button
+                onClick={() => addToCart(selectedItem, selectedItem.tempQty || 1, modalDates)}
+                disabled={!modalDates.delivery || !modalDates.pickup}
+                className={`w-full px-6 py-3 rounded-lg font-bold text-lg transition-colors ${
+                  modalDates.delivery && modalDates.pickup
+                    ? 'bg-yellow-400 text-gray-800 hover:bg-yellow-500 cursor-pointer'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                {modalDates.delivery && modalDates.pickup
+                  ? `Add to Cart - $${(parseFloat(selectedItem.base_price) * (selectedItem.tempQty || 1)).toFixed(2)}`
+                  : 'Select dates first'}
+              </button>
+
+              {error && (
+                <div className="mt-2 text-red-600 text-sm text-center">
+                  {error}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

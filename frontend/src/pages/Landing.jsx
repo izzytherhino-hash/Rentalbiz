@@ -1,14 +1,50 @@
 import { Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Menu, X } from 'lucide-react'
+import Testimonials from '../components/Testimonials'
+// import CategoryBrowse from '../components/CategoryBrowse'
+import SearchBar from '../components/SearchBar'
+import PromotionsBanner from '../components/PromotionsBanner'
+import { API_BASE_URL } from '../services/api'
 
 export default function Landing() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [featuredItems, setFeaturedItems] = useState([])
+
+  useEffect(() => {
+    console.log('[Landing] Component mounted, fetching featured items...')
+    const fetchFeaturedItems = async () => {
+      try {
+        console.log('[Landing] Fetching from:', `${API_BASE_URL}/api/inventory/`)
+        const response = await fetch(`${API_BASE_URL}/api/inventory/`)
+        console.log('[Landing] Response status:', response.status)
+        if (response.ok) {
+          const items = await response.json()
+          console.log('[Landing] Received items:', items.length)
+          // Get first 6 items with photos for featured section
+          const itemsWithPhotos = items
+            .filter(item => item.photos && item.photos.length > 0 && item.website_visible)
+            .slice(0, 6)
+          console.log('[Landing] Items with photos:', itemsWithPhotos.length)
+          console.log('[Landing] Featured items:', itemsWithPhotos)
+          setFeaturedItems(itemsWithPhotos)
+        }
+      } catch (error) {
+        console.error('[Landing] Error fetching featured items:', error)
+      }
+    }
+    fetchFeaturedItems()
+  }, [])
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Promotions Banner */}
+      <div className="fixed w-full top-0 z-50">
+        <PromotionsBanner />
+      </div>
+
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 fixed w-full top-0 z-50">
+      <header className="bg-white border-b border-gray-200 fixed w-full top-12 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-4 sm:py-5 flex justify-between items-center">
           <Link to="/" className="flex items-center no-underline">
             <span className="font-serif text-2xl sm:text-3xl lg:text-4xl font-light text-gray-800 tracking-tight">
@@ -63,7 +99,7 @@ export default function Landing() {
       </header>
 
       {/* Hero Section */}
-      <section className="mt-16 sm:mt-20 pt-12 sm:pt-16 lg:pt-24 pb-8 sm:pb-10 lg:pb-14 bg-gradient-to-b from-white to-yellow-50 text-center relative overflow-hidden">
+      <section className="mt-28 sm:mt-32 pt-12 sm:pt-16 lg:pt-24 pb-8 sm:pb-10 lg:pb-14 bg-gradient-to-b from-white to-yellow-50 text-center relative overflow-hidden">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-10">
           <h1 className="font-serif text-3xl sm:text-5xl lg:text-7xl font-light text-gray-800 mb-4 sm:mb-6 leading-tight tracking-tight">
             Let's Get The Partay Started
@@ -76,9 +112,15 @@ export default function Landing() {
             with you and then sources and arranges the best deals on rental equipment.
             So you get the best deal, best service and obviously, the best partay!
           </p>
+
+          {/* Search Bar */}
+          <div className="mb-8 sm:mb-10">
+            <SearchBar />
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-5 justify-center items-center mb-12 sm:mb-16 lg:mb-20">
             <Link
-              to="/book"
+              to="/book?view=items"
               className="w-full sm:w-auto bg-yellow-400 text-gray-800 px-8 sm:px-10 lg:px-12 py-3 sm:py-4 rounded-lg text-sm sm:text-base font-semibold uppercase tracking-wide hover:bg-yellow-500 transition-all hover:-translate-y-0.5 hover:shadow-xl no-underline text-center"
             >
               Plan Your Partay
@@ -135,6 +177,9 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* Category Browse Section */}
+      {/* <CategoryBrowse /> */}
 
       {/* Features Section */}
       <section className="py-12 sm:py-16 lg:py-28 px-4 sm:px-6 lg:px-10 bg-white">
@@ -217,6 +262,72 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* Featured Equipment */}
+      {featuredItems.length > 0 && (
+        <section className="py-12 sm:py-16 lg:py-24 px-4 sm:px-6 lg:px-10 bg-white">
+          <div className="max-w-7xl mx-auto">
+            <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-light text-center text-gray-800 mb-4 tracking-tight">
+              Featured Equipment
+            </h2>
+            <p className="text-center text-gray-600 text-base sm:text-lg mb-10 sm:mb-14">
+              Browse our most popular party rentals
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+              {featuredItems.map((item) => {
+                const thumbnail = item.photos?.find(p => p.is_thumbnail) || item.photos?.[0]
+                return (
+                  <Link
+                    key={item.inventory_item_id}
+                    to="/book"
+                    className="group bg-white rounded-xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 no-underline border border-gray-200"
+                  >
+                    <div className="relative overflow-hidden bg-gray-100 h-56">
+                      {thumbnail && (
+                        <img
+                          src={thumbnail.image_url}
+                          alt={item.name}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                          onError={(e) => {
+                            e.target.style.display = 'none'
+                          }}
+                        />
+                      )}
+                      <div className="absolute top-3 right-3 bg-yellow-400 text-gray-800 px-3 py-1.5 rounded-full text-sm font-semibold">
+                        ${parseFloat(item.base_price).toFixed(0)}/day
+                      </div>
+                    </div>
+                    <div className="p-5">
+                      <h3 className="text-xl font-semibold text-gray-800 mb-2 group-hover:text-yellow-600 transition-colors">
+                        {item.name}
+                      </h3>
+                      <p className="text-gray-600 text-sm line-clamp-2 mb-3">
+                        {item.description || 'Perfect for your next event!'}
+                      </p>
+                      <span className="inline-block px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
+                        {item.category}
+                      </span>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+
+            <div className="text-center mt-10 sm:mt-12">
+              <Link
+                to="/book"
+                className="inline-block bg-yellow-400 text-gray-800 px-8 sm:px-10 py-3 sm:py-4 rounded-lg text-sm sm:text-base font-semibold uppercase tracking-wide hover:bg-yellow-500 transition-all hover:-translate-y-0.5 hover:shadow-lg no-underline"
+              >
+                View All Equipment
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Testimonials */}
+      <Testimonials />
 
       {/* Final CTA */}
       <section className="py-12 sm:py-16 lg:py-28 px-4 sm:px-6 lg:px-10 bg-gradient-to-br from-yellow-400 to-yellow-500 text-center">
