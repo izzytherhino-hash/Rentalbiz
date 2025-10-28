@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ShoppingCart, X, Calendar, AlertCircle, Plus, Minus } from 'lucide-react'
+import { ShoppingCart, X, Calendar, AlertCircle, Plus, Minus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { bookingAPI, inventoryAPI } from '../services/api'
 import ItemAvailabilityCalendar from '../components/ItemAvailabilityCalendar'
 
@@ -13,6 +13,7 @@ export default function CustomerBooking() {
   const [cart, setCart] = useState([]) // Cart items: [{item, quantity}]
   const [selectedItem, setSelectedItem] = useState(null) // For modal
   const [modalDates, setModalDates] = useState({ delivery: null, pickup: null }) // Date selection in modal
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0) // Track current photo in modal
 
   // Booking flow state
   const [bookingStage, setBookingStage] = useState('browse') // 'browse', 'dates', 'customer', 'complete'
@@ -130,7 +131,23 @@ export default function CustomerBooking() {
     }
     setSelectedItem(null)
     setModalDates({ delivery: null, pickup: null }) // Reset for next item
+    setCurrentPhotoIndex(0) // Reset photo index
     setError(null)
+  }
+
+  // Photo navigation helpers
+  const nextPhoto = () => {
+    if (selectedItem && selectedItem.photos) {
+      setCurrentPhotoIndex((prev) => (prev + 1) % selectedItem.photos.length)
+    }
+  }
+
+  const prevPhoto = () => {
+    if (selectedItem && selectedItem.photos) {
+      setCurrentPhotoIndex((prev) =>
+        prev === 0 ? selectedItem.photos.length - 1 : prev - 1
+      )
+    }
   }
 
   const removeFromCart = (itemId) => {
@@ -363,7 +380,10 @@ export default function CustomerBooking() {
                         <span className="text-sm text-gray-500">{item.category}</span>
                       </div>
                       <button
-                        onClick={() => setSelectedItem(item)}
+                        onClick={() => {
+                          setSelectedItem(item)
+                          setCurrentPhotoIndex(0) // Reset photo index when opening modal
+                        }}
                         className="w-full bg-yellow-400 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-yellow-500 transition-colors"
                       >
                         View Details & Add to Cart
@@ -489,9 +509,61 @@ export default function CustomerBooking() {
             </div>
 
             <div className="p-6">
-              {selectedItem.photos?.[0]?.image_url && (
-                <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden mb-6">
-                  <img src={selectedItem.photos[0].image_url} alt={selectedItem.name} className="w-full h-full object-cover" />
+              {selectedItem.photos && selectedItem.photos.length > 0 && (
+                <div className="relative mb-6">
+                  {/* Photo Carousel */}
+                  <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden">
+                    <img
+                      src={selectedItem.photos[currentPhotoIndex]?.image_url}
+                      alt={`${selectedItem.name} - Photo ${currentPhotoIndex + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  {/* Navigation Buttons - Only show if multiple photos */}
+                  {selectedItem.photos.length > 1 && (
+                    <>
+                      <button
+                        onClick={prevPhoto}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-white bg-opacity-80 hover:bg-opacity-100 rounded-full p-2 shadow-lg transition-all"
+                        aria-label="Previous photo"
+                      >
+                        <ChevronLeft className="w-5 h-5 text-gray-800" />
+                      </button>
+                      <button
+                        onClick={nextPhoto}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-white bg-opacity-80 hover:bg-opacity-100 rounded-full p-2 shadow-lg transition-all"
+                        aria-label="Next photo"
+                      >
+                        <ChevronRight className="w-5 h-5 text-gray-800" />
+                      </button>
+                    </>
+                  )}
+
+                  {/* Photo Indicators */}
+                  {selectedItem.photos.length > 1 && (
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
+                      {selectedItem.photos.map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setCurrentPhotoIndex(index)}
+                          className={`w-2 h-2 rounded-full transition-all ${
+                            index === currentPhotoIndex
+                              ? 'bg-yellow-400 w-6'
+                              : 'bg-white bg-opacity-60 hover:bg-opacity-100'
+                          }`}
+                          aria-label={`View photo ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Photo Counter */}
+                  {selectedItem.photos.length > 1 && (
+                    <div className="absolute top-3 right-3 bg-black bg-opacity-60 text-white px-3 py-1 rounded-full text-sm font-medium">
+                      {currentPhotoIndex + 1} / {selectedItem.photos.length}
+                    </div>
+                  )}
                 </div>
               )}
 
