@@ -4,7 +4,9 @@ Seed database with sample data for development.
 Creates:
 - 2 warehouses (Warehouse A - Main, Warehouse B - North)
 - 3 drivers with performance metrics (Mike Johnson, Sarah Chen, James Rodriguez)
-- 8 inventory items (bounce houses, concessions, etc.)
+- 13 inventory items (8 equipment items + 5 services)
+  Equipment: bounce houses, water slides, concessions, photo booth, furniture
+  Services: WiFi rental, face painting, ice cream truck, taco truck, tent sleep over party
 - 5 customers with sample bookings
 """
 
@@ -225,6 +227,67 @@ def seed_inventory_items(db: Session, warehouse_ids: dict[str, str]) -> None:
             "current_warehouse_id": warehouse_b_id,
             "status": InventoryStatus.AVAILABLE.value,
         },
+        # Services
+        {
+            "name": "WiFi Rental",
+            "category": "Services",
+            "base_price": Decimal("100.00"),
+            "requires_power": True,
+            "min_space_sqft": 0,
+            "allowed_surfaces": "grass,concrete,asphalt,artificial_turf,indoor",
+            "default_warehouse_id": warehouse_a_id,
+            "current_warehouse_id": warehouse_a_id,
+            "status": InventoryStatus.AVAILABLE.value,
+            "description": "Professional-grade mobile WiFi hotspot rental. Perfect for outdoor events, parties, and gatherings. Provides reliable high-speed internet for up to 50 devices."
+        },
+        {
+            "name": "Face Painting Service",
+            "category": "Services",
+            "base_price": Decimal("150.00"),
+            "requires_power": False,
+            "min_space_sqft": 25,  # 5x5 for setup area
+            "allowed_surfaces": "grass,concrete,asphalt,artificial_turf,indoor",
+            "default_warehouse_id": warehouse_a_id,
+            "current_warehouse_id": warehouse_a_id,
+            "status": InventoryStatus.AVAILABLE.value,
+            "description": "Professional face painting artist for your event. Includes all supplies and can paint 15-20 faces per hour with fun designs for kids and adults."
+        },
+        {
+            "name": "Ice Cream Truck",
+            "category": "Services",
+            "base_price": Decimal("400.00"),
+            "requires_power": False,
+            "min_space_sqft": 200,  # Parking space
+            "allowed_surfaces": "concrete,asphalt",
+            "default_warehouse_id": warehouse_b_id,
+            "current_warehouse_id": warehouse_b_id,
+            "status": InventoryStatus.AVAILABLE.value,
+            "description": "Fully stocked ice cream truck rental for 2 hours. Includes variety of ice cream treats, music, and friendly service. Perfect for birthday parties and community events."
+        },
+        {
+            "name": "Taco Truck",
+            "category": "Services",
+            "base_price": Decimal("600.00"),
+            "requires_power": False,
+            "min_space_sqft": 300,  # Parking and service area
+            "allowed_surfaces": "concrete,asphalt",
+            "default_warehouse_id": warehouse_b_id,
+            "current_warehouse_id": warehouse_b_id,
+            "status": InventoryStatus.AVAILABLE.value,
+            "description": "Authentic taco truck catering service. Includes professional chef, all ingredients, and service for up to 50 guests. Choice of meat, vegetarian, and vegan options."
+        },
+        {
+            "name": "Tent Sleep Over Party",
+            "category": "Services",
+            "base_price": Decimal("350.00"),
+            "requires_power": False,
+            "min_space_sqft": 400,  # Space for multiple teepees
+            "allowed_surfaces": "grass,indoor",
+            "default_warehouse_id": warehouse_a_id,
+            "current_warehouse_id": warehouse_a_id,
+            "status": InventoryStatus.AVAILABLE.value,
+            "description": "Adorable teepee tent setup for the ultimate camping-themed sleepover party. Includes 4-6 decorated teepees with cozy bedding, fairy lights, and themed decorations. Perfect for kids' slumber parties and indoor camping experiences."
+        },
     ]
 
     for data in items_data:
@@ -296,6 +359,26 @@ def seed_inventory_photos(db: Session) -> None:
         "Tables & Chairs Set": [
             {"url": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
             {"url": "https://images.unsplash.com/photo-1478145787956-f6f12c59624d?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
+        ],
+        "WiFi Rental": [
+            {"url": "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1606904825846-647eb07f5be2?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
+        ],
+        "Face Painting Service": [
+            {"url": "https://images.unsplash.com/photo-1522075782449-e45a34f1ddfb?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
+        ],
+        "Ice Cream Truck": [
+            {"url": "https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
+        ],
+        "Taco Truck": [
+            {"url": "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1613514785940-daed07799d9b?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
+        ],
+        "Tent Sleep Over Party": [
+            {"url": "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=1200&h=800&fit=crop&q=85", "order": 0, "thumbnail": True},
+            {"url": "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=1200&h=800&fit=crop&q=85", "order": 1, "thumbnail": False},
         ],
     }
 
@@ -765,9 +848,9 @@ def seed_database() -> None:
     Creates:
     - 2 warehouses
     - 3 drivers
-    - 8 inventory items
+    - 13 inventory items (8 equipment + 5 services)
     - 5 customers
-    - 5 bookings with various statuses (completed, active, upcoming, pending)
+    - 15 bookings with various statuses (completed, active, upcoming, pending)
     """
     # Create tables first
     Base.metadata.create_all(bind=engine)

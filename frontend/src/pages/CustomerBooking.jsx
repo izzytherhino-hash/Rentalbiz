@@ -265,10 +265,10 @@ export default function CustomerBooking() {
 
           <button
             onClick={() => setBookingStage(cart.length > 0 ? 'dates' : 'browse')}
-            className="flex items-center gap-2 bg-yellow-400 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-yellow-500 transition-colors relative"
+            className="flex items-center gap-2 bg-yellow-400 text-gray-800 px-3 sm:px-4 py-2 rounded-lg font-semibold hover:bg-yellow-500 transition-colors relative"
           >
             <ShoppingCart className="w-5 h-5" />
-            <span>Cart ({cart.length})</span>
+            <span className="hidden sm:inline">Cart ({cart.length})</span>
             {cart.length > 0 && (
               <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
                 {cart.length}
@@ -376,13 +376,13 @@ export default function CustomerBooking() {
 
             {/* Book Items Button */}
             {cart.length > 0 && (
-              <div className="fixed bottom-6 right-6 z-50">
+              <div className="fixed bottom-0 left-0 right-0 sm:bottom-6 sm:right-6 sm:left-auto z-50 px-4 sm:px-0 pb-4 sm:pb-0">
                 <button
                   onClick={proceedToCheckout}
-                  className="bg-yellow-400 text-gray-800 px-8 py-4 rounded-full font-bold text-lg shadow-lg hover:bg-yellow-500 transition-colors flex items-center gap-2"
+                  className="w-full sm:w-auto bg-yellow-400 text-gray-800 px-6 sm:px-8 py-4 rounded-lg sm:rounded-full font-bold text-base sm:text-lg shadow-lg hover:bg-yellow-500 transition-colors flex items-center justify-center gap-2"
                 >
                   Book {cart.length} Item{cart.length > 1 ? 's' : ''} (${getCartTotal().toFixed(2)})
-                  <Calendar className="w-6 h-6" />
+                  <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
               </div>
             )}
@@ -479,8 +479,8 @@ export default function CustomerBooking() {
 
       {/* Item Detail Modal */}
       {selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-none sm:rounded-lg max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
               <h2 className="text-2xl font-semibold text-gray-800">{selectedItem.name}</h2>
               <button onClick={() => setSelectedItem(null)} className="text-gray-400 hover:text-gray-600">
