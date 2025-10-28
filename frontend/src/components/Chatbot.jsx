@@ -1,18 +1,20 @@
 import { useState, useRef, useEffect } from 'react'
-import { MessageCircle, X, Send, Loader } from 'lucide-react'
-import { chatbotAPI } from '../services/api'
+import { MessageCircle, X, Send, Loader, Lightbulb, ArrowUp } from 'lucide-react'
+import { chatbotAPI, phineasAPI } from '../services/api'
 
 export default function Chatbot() {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: 'Hi! I\'m your Partay business assistant. Ask me anything about your customers, bookings, inventory, or drivers!',
+      content: 'Hi! I\'m Phineas, your AI operations manager. I can help answer questions, analyze your business, and propose automated actions to optimize operations. What can I help you with?',
     },
   ])
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [pendingProposals, setPendingProposals] = useState([])
+  const [loadingProposals, setLoadingProposals] = useState(false)
   const messagesEndRef = useRef(null)
 
   // Auto-scroll to bottom when new messages arrive
@@ -23,6 +25,32 @@ export default function Chatbot() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Fetch pending proposals when chat opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchPendingProposals()
+    }
+  }, [isOpen])
+
+  const fetchPendingProposals = async () => {
+    setLoadingProposals(true)
+    try {
+      const data = await phineasAPI.getProposals('pending', null, 10)
+      setPendingProposals(data)
+    } catch (err) {
+      console.error('Failed to fetch pending proposals:', err)
+      // Silently fail - don't show error for this background fetch
+    } finally {
+      setLoadingProposals(false)
+    }
+  }
+
+  const scrollToSuggestions = () => {
+    // Close the chat and scroll to top of page where suggestions are
+    setIsOpen(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const handleSendMessage = async (e) => {
     e.preventDefault()
@@ -51,7 +79,7 @@ export default function Chatbot() {
 
       // Check if it's an API key error
       if (err.message.includes('API key not configured')) {
-        setError('AI chatbot is not configured. Please add your Anthropic API key to backend/.env')
+        setError('Phineas is not configured. Please add your Anthropic API key to backend/.env')
       } else {
         setError(`Failed to get response: ${err.message}`)
       }
@@ -64,7 +92,7 @@ export default function Chatbot() {
     setMessages([
       {
         role: 'assistant',
-        content: 'Hi! I\'m your Partay business assistant. Ask me anything about your customers, bookings, inventory, or drivers!',
+        content: 'Hi! I\'m Phineas, your AI operations manager. I can help answer questions, analyze your business, and propose automated actions to optimize operations. What can I help you with?',
       },
     ])
     setError(null)
@@ -91,7 +119,7 @@ export default function Chatbot() {
           <div className="bg-yellow-400 text-gray-800 px-4 py-3 rounded-t-lg flex items-center justify-between">
             <div className="flex items-center">
               <MessageCircle className="w-5 h-5 mr-2" />
-              <h3 className="font-medium">Business Assistant</h3>
+              <h3 className="font-medium">Phineas AI</h3>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -111,6 +139,28 @@ export default function Chatbot() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[400px]">
+            {/* Pending proposals notification */}
+            {!loadingProposals && pendingProposals.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-3">
+                <Lightbulb className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm text-yellow-800 font-medium mb-1">
+                    {pendingProposals.length} pending suggestion{pendingProposals.length !== 1 ? 's' : ''}
+                  </p>
+                  <p className="text-xs text-yellow-700 mb-2">
+                    I've found {pendingProposals.length} optimization{pendingProposals.length !== 1 ? 's' : ''} that need{pendingProposals.length === 1 ? 's' : ''} your review!
+                  </p>
+                  <button
+                    onClick={scrollToSuggestions}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-400 text-gray-800 rounded text-xs font-medium hover:bg-yellow-500 transition"
+                  >
+                    <ArrowUp className="w-3 h-3" />
+                    View Suggestions
+                  </button>
+                </div>
+              </div>
+            )}
+
             {messages.map((message, index) => (
               <div
                 key={index}
@@ -191,12 +241,20 @@ export default function Chatbot() {
       {/* Floating Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-yellow-400 text-gray-800 rounded-full p-4 shadow-lg hover:bg-yellow-500 transition-all hover:scale-110"
+        className="bg-yellow-400 text-gray-800 rounded-full p-4 shadow-lg hover:bg-yellow-500 transition-all hover:scale-110 relative"
       >
         {isOpen ? (
           <X className="w-6 h-6" />
         ) : (
-          <MessageCircle className="w-6 h-6" />
+          <>
+            <MessageCircle className="w-6 h-6" />
+            {/* Notification badge for pending proposals */}
+            {!loadingProposals && pendingProposals.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                {pendingProposals.length}
+              </span>
+            )}
+          </>
         )}
       </button>
     </div>

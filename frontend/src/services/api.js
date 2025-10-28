@@ -351,6 +351,57 @@ export const chatbotAPI = {
   },
 };
 
+// Phineas AI API
+export const phineasAPI = {
+  /**
+   * Scan for unassigned bookings and create driver assignment proposals.
+   */
+  scanAssignments: async () => {
+    return apiFetch('/api/admin/phineas/scan-assignments', {
+      method: 'POST',
+    });
+  },
+
+  /**
+   * Get list of Phineas proposals with optional filters.
+   */
+  getProposals: async (statusFilter = null, proposalType = null, limit = 50) => {
+    const params = new URLSearchParams();
+    if (statusFilter) params.append('status_filter', statusFilter);
+    if (proposalType) params.append('proposal_type', proposalType);
+    if (limit) params.append('limit', limit.toString());
+    return apiFetch(`/api/admin/phineas/proposals?${params}`);
+  },
+
+  /**
+   * Approve a pending proposal.
+   */
+  approveProposal: async (proposalId) => {
+    return apiFetch(`/api/admin/phineas/proposals/${proposalId}/approve`, {
+      method: 'PATCH',
+    });
+  },
+
+  /**
+   * Reject a pending proposal.
+   */
+  rejectProposal: async (proposalId) => {
+    return apiFetch(`/api/admin/phineas/proposals/${proposalId}/reject`, {
+      method: 'PATCH',
+    });
+  },
+
+  /**
+   * Execute an approved proposal.
+   */
+  executeProposal: async (proposalId) => {
+    return apiFetch('/api/admin/phineas/execute-assignment', {
+      method: 'POST',
+      body: JSON.stringify({ proposal_id: proposalId }),
+    });
+  },
+};
+
 // Health check
 export const healthCheck = async () => {
   return apiFetch('/health');

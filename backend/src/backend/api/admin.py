@@ -511,6 +511,46 @@ async def migrate_schema(db: Session = Depends(get_db)):
             ALTER TABLE drivers
             ADD COLUMN IF NOT EXISTS total_ratings INTEGER DEFAULT 0
             """,
+            # Create phineas_proposals table if it doesn't exist
+            """
+            CREATE TABLE IF NOT EXISTS phineas_proposals (
+                proposal_id VARCHAR(36) PRIMARY KEY,
+                proposal_type VARCHAR(50) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                title VARCHAR(255) NOT NULL,
+                description TEXT NOT NULL,
+                reasoning TEXT NOT NULL,
+                confidence_score DECIMAL(3,2) NOT NULL,
+                action_data TEXT NOT NULL,
+                booking_id VARCHAR(36) REFERENCES bookings(booking_id),
+                driver_id VARCHAR(36) REFERENCES drivers(driver_id),
+                inventory_item_id VARCHAR(36) REFERENCES inventory_items(inventory_item_id),
+                customer_id VARCHAR(36) REFERENCES customers(customer_id),
+                approved_at TIMESTAMP,
+                executed_at TIMESTAMP,
+                execution_result TEXT,
+                error_message TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            # Add indexes for phineas_proposals
+            """
+            CREATE INDEX IF NOT EXISTS idx_phineas_proposals_type
+            ON phineas_proposals(proposal_type)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_phineas_proposals_status
+            ON phineas_proposals(status)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_phineas_proposals_booking
+            ON phineas_proposals(booking_id)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_phineas_proposals_created
+            ON phineas_proposals(created_at)
+            """,
         ]
 
         # Execute each migration

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Package, Truck, MapPin, DollarSign, AlertCircle, Clock, Search, Plus, Filter, Users, Warehouse, CheckCircle, Calendar, X, Edit, Trash2, List, Map, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react'
 import { adminAPI, inventoryAPI, driverAPI, API_BASE_URL } from '../services/api'
 import Chatbot from '../components/Chatbot'
+import PhineasSuggestions from '../components/PhineasSuggestions'
 import InventoryModal from '../components/InventoryModal'
 import InventoryCalendarModal from '../components/InventoryCalendarModal'
 import DriverCalendarModal from '../components/DriverCalendarModal'
@@ -2446,6 +2447,13 @@ export default function AdminDashboard() {
           driver={selectedDriver}
           onClose={closeDriverCalendarModal}
         />
+      )}
+
+      {/* Phineas Suggestions Dashboard Card */}
+      {view === 'calendar' && (
+        <div className="mt-6">
+          <PhineasSuggestions onRefreshDashboard={fetchDashboardData} />
+        </div>
       )}
 
       {/* AI Chatbot */}

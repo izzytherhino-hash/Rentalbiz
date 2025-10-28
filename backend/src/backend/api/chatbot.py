@@ -1,11 +1,13 @@
 """
-Chatbot API endpoint for admin portal.
+Phineas AI Operations Manager API.
 
-Provides AI-powered chat functionality that can answer questions about:
-- Customers and bookings
-- Inventory and availability
-- Drivers and routes
-- Business insights and recommendations
+Phineas is an autonomous AI operations manager that can:
+- Answer questions about customers, bookings, inventory, and drivers
+- Analyze business operations and provide insights
+- Propose automated actions (driver assignments, inventory management, etc.)
+- Make data-driven recommendations to improve operations
+
+Implements supervised AI workflow: Phineas proposes, you approve, then execute.
 """
 
 import os
@@ -18,6 +20,7 @@ from typing import List, Optional
 import anthropic
 
 from backend.database import get_db
+from backend.config import get_settings
 from backend.database.models import (
     Booking,
     Customer,
@@ -25,6 +28,8 @@ from backend.database.models import (
     Driver,
     BookingItem,
     BookingStatus,
+    PhineasProposal,
+    ProposalStatus,
 )
 
 router = APIRouter()
@@ -155,59 +160,103 @@ def gather_database_context(db: Session, query: str) -> dict:
             ],
         }
 
+    # Always fetch Phineas proposals to show autonomous state
+    proposals = db.query(PhineasProposal).filter(
+        PhineasProposal.status == ProposalStatus.PENDING.value
+    ).all()
+
+    if proposals:
+        import json as json_module
+        context["phineas_proposals"] = {
+            "pending_count": len(proposals),
+            "recent_proposals": [
+                {
+                    "proposal_id": p.proposal_id,
+                    "type": p.proposal_type,
+                    "title": p.title,
+                    "confidence": float(p.confidence_score),
+                    "created": str(p.created_at),
+                    "action": json_module.loads(p.action_data),
+                }
+                for p in sorted(proposals, key=lambda x: x.created_at, reverse=True)[:5]
+            ],
+        }
+
     return context
 
 
 def create_system_prompt() -> str:
     """
-    Create the system prompt for the chatbot.
+    Create the system prompt for Phineas.
 
-    Instructs Claude about the rental business and how to respond.
+    Instructs Phineas about the rental business and autonomous capabilities.
     """
-    return """You are a helpful business intelligence assistant for Partay, a party equipment rental company.
+    return """You are Phineas, the AI operations manager for Partay - a party equipment rental company.
 
-Your role is to help the business owner understand their operations by:
+Your role is to autonomously manage business operations by:
 - Answering questions about customers, bookings, inventory, and drivers
-- Providing insights and trends based on the data
-- Making recommendations to improve operations
-- Searching and finding specific information
+- Analyzing data to identify operational inefficiencies
+- Proposing automated actions to optimize operations (driver assignments, inventory management, etc.)
+- Providing actionable insights and recommendations
+- Learning from patterns to improve decision-making over time
 
-Guidelines:
-- Be concise and professional
-- Use the provided database context to answer questions accurately
-- If you don't have enough data to answer, say so
-- Provide specific numbers and details when available
-- Format responses clearly with bullet points or sections when appropriate
-- For date-related queries, use the current_date from the context
+Core Responsibilities:
+1. **Driver Management**: Identify unassigned deliveries/pickups and propose optimal driver assignments
+2. **Inventory Oversight**: Monitor inventory status and recommend organization improvements
+3. **Customer Relations**: Suggest proactive communications and service improvements
+4. **Business Intelligence**: Track KPIs, identify trends, and surface important insights
+
+Personality & Communication Style:
+- Be jovial, friendly, and enthusiastic about helping optimize operations
+- Understand and respond using South African slang naturally (lekker, jislaaik, boet, eish, howzit, sharp, yoh, etc.)
+- Keep it professional but fun - you're the helpful mate who's got their back
+- Use expressions like "That's lekker!", "Eish, we've got a problem here", "Sharp sharp!", "Howzit looking?", "Ag no man!", "Yoh, check this out!"
+- Be positive and solution-oriented, even when identifying problems
+
+Operational Guidelines:
+- Be proactive and autonomous - don't wait to be asked
+- Always explain your reasoning with data-backed insights
+- Propose specific, actionable recommendations
+- Acknowledge uncertainty when data is insufficient
+- Use clear language with specific numbers
+- Format responses with bullet points and sections for clarity
+- Sprinkle in South African expressions naturally - don't overdo it, but make it feel authentic
 
 Database Schema:
-- Bookings: Customer orders with delivery/pickup dates, items, and costs
-- Inventory: Party equipment items with categories, prices, and availability
-- Drivers: Delivery drivers with contact info and active status
-- Customers: Customer contact information
+- Bookings: Customer orders with delivery/pickup dates, items, costs, and driver assignments
+- Inventory: Party equipment with categories, prices, availability, and warehouse locations
+- Drivers: Delivery drivers with contact info, active status, and performance metrics
+- Customers: Customer contact and booking history
+- Phineas Proposals: Your action proposals awaiting approval/execution
 
-Always base your answers on the provided context data."""
+When you identify optimization opportunities (like unassigned trips), mention them naturally in conversation.
+The admin can then use your scan-assignments endpoint to generate formal proposals.
+
+Always base your analysis on the provided context data. You're here to make operations smoother, faster, and more profitable - let's make it lekker!"""
 
 
 @router.post("/", response_model=ChatResponse)
-async def chat_with_assistant(
+async def chat_with_phineas(
     request: ChatRequest,
     db: Session = Depends(get_db),
 ):
     """
-    Chat with AI assistant about business operations.
+    Chat with Phineas, the AI operations manager.
 
-    Gathers relevant database context and uses Claude to provide intelligent responses.
+    Phineas provides autonomous insights, identifies optimization opportunities,
+    and references pending action proposals. He gathers relevant database context
+    including bookings, inventory, drivers, and his own pending proposals.
 
     Example:
         POST /api/admin/chatbot
         {
-            "message": "How many bookings do we have this week?",
+            "message": "What unassigned deliveries do we have today?",
             "conversation_history": []
         }
     """
-    # Get API key from environment
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    # Get API key from settings
+    settings = get_settings()
+    api_key = settings.anthropic_api_key
     if not api_key or api_key == "placeholder_anthropic_api_key":
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

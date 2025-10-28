@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     twilio_auth_token: str | None = None
     twilio_phone_number: str | None = None
     sendgrid_api_key: str | None = None
+    anthropic_api_key: str = "placeholder_anthropic_api_key"
 
     model_config = SettingsConfigDict(
         env_file=".env",

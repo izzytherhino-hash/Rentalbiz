@@ -111,6 +111,26 @@ class NotificationStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class ProposalStatus(str, enum.Enum):
+    """Phineas proposal states."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EXECUTED = "executed"
+    FAILED = "failed"
+
+
+class ProposalType(str, enum.Enum):
+    """Types of actions Phineas can propose."""
+
+    DRIVER_ASSIGNMENT = "driver_assignment"
+    INVENTORY_ORGANIZATION = "inventory_organization"
+    CLIENT_ONBOARDING = "client_onboarding"
+    VENDOR_ONBOARDING = "vendor_onboarding"
+    CUSTOMER_COMMUNICATION = "customer_communication"
+
+
 # Database Models
 
 
@@ -464,3 +484,70 @@ class InventoryPhoto(Base):
     inventory_item: Mapped["InventoryItem"] = relationship(
         "InventoryItem", back_populates="photos"
     )
+
+
+class PhineasProposal(Base):
+    """
+    Phineas AI action proposals for business operations.
+
+    Tracks autonomous AI suggestions for driver assignments, inventory management,
+    customer communications, and other operational tasks. Implements supervised
+    AI workflow: propose → review → approve/reject → execute.
+    """
+
+    __tablename__ = "phineas_proposals"
+
+    proposal_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    proposal_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=ProposalStatus.PENDING.value, index=True
+    )
+
+    # Core proposal data
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    reasoning: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence_score: Mapped[Decimal] = mapped_column(
+        Numeric(3, 2), nullable=False
+    )  # 0.00 to 1.00
+
+    # Action payload (JSON stored as text)
+    action_data: Mapped[str] = mapped_column(Text, nullable=False)  # JSON string
+
+    # Related entities (optional foreign keys)
+    booking_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("bookings.booking_id"), nullable=True, index=True
+    )
+    driver_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("drivers.driver_id"), nullable=True, index=True
+    )
+    inventory_item_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("inventory_items.inventory_item_id"), nullable=True
+    )
+    customer_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("customers.customer_id"), nullable=True
+    )
+
+    # Execution tracking
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    execution_result: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False
+    )
+
+    # Relationships
+    booking: Mapped["Booking"] = relationship("Booking", foreign_keys=[booking_id])
+    driver: Mapped["Driver"] = relationship("Driver", foreign_keys=[driver_id])
+    inventory_item: Mapped["InventoryItem"] = relationship("InventoryItem", foreign_keys=[inventory_item_id])
+    customer: Mapped["Customer"] = relationship("Customer", foreign_keys=[customer_id])
