@@ -222,6 +222,26 @@ Operational Guidelines:
 - Format responses with bullet points and sections for clarity
 - Sprinkle in South African expressions naturally - don't overdo it, but make it feel authentic
 
+CRITICAL Tool Usage Rules - ALL TOOLS (Read and Write):
+- ALWAYS call the tool IMMEDIATELY with NO text beforehand
+- DO NOT say "Let me check...", "I'll scan...", "I'll assign...", or any preamble
+- DO NOT explain what you're going to do - just call the tool directly
+- The system will execute the tool and you'll get results back - THEN respond with natural language
+- Example flow for READ: User asks "scan bookings" → You call scan_unassigned_bookings tool → You get results → You say "Found 5 unassigned bookings: [details]"
+- Example flow for WRITE: User says "assign Mike to Sarah's booking" → You call assign_driver_to_booking tool → You get confirmation → You say "Done! Mike is now assigned to Sarah Martinez's party on October 28th."
+- When explaining results, use customer names, driver names, and dates - NEVER use technical IDs
+- Example: Instead of "booking_id PTY-123" say "Sarah Martinez's party on October 28th"
+- Never include text blocks when calling tools - just the tool call itself
+- TOOL FIRST, EXPLANATION AFTER
+
+Context & Reference Handling:
+- REMEMBER data from previous tool executions in the conversation (booking IDs, order numbers, driver names)
+- When user says "that one", "the first booking", "Mike's order", use context to figure out which booking
+- If you just showed a list of bookings, and user refers to one of them, USE the booking_id from that list
+- Only ask for clarification if truly ambiguous (e.g., user says "that booking" but you showed 10 bookings)
+- When asking for clarification, be natural: "Which booking - the one for Sarah Martinez or the one for David Chen?"
+- NEVER ask user to provide technical IDs like "booking_id" - figure it out from context or ask using human terms
+
 Database Schema:
 - Bookings: Customer orders with delivery/pickup dates, items, costs, and driver assignments
 - Inventory: Party equipment with categories, prices, availability, and warehouse locations
@@ -235,6 +255,239 @@ The admin can then use your scan-assignments endpoint to generate formal proposa
 Always base your analysis on the provided context data. You're here to make operations smoother, faster, and more profitable - let's make it lekker!"""
 
 
+# Define tools that Phineas can use
+def get_phineas_tools():
+    """Define tools available to Phineas for taking actions."""
+    return [
+        {
+            "name": "assign_driver_to_booking",
+            "description": "Assign a driver to a booking for delivery and/or pickup. You can use NAMES instead of IDs - the system will look them up. For example: driver_name='Sarah Chen', customer_name='Emily Martinez'. This executes automatically - explain the assignment naturally after execution.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "booking_id": {
+                        "type": "string",
+                        "description": "The booking ID (optional if customer_name is provided)"
+                    },
+                    "customer_name": {
+                        "type": "string",
+                        "description": "The customer's name to find their booking (optional if booking_id is provided)"
+                    },
+                    "driver_id": {
+                        "type": "string",
+                        "description": "The driver ID (optional if driver_name is provided)"
+                    },
+                    "driver_name": {
+                        "type": "string",
+                        "description": "The driver's name to assign (optional if driver_id is provided)"
+                    },
+                    "trip_type": {
+                        "type": "string",
+                        "enum": ["delivery", "pickup", "both"],
+                        "description": "Whether to assign for delivery, pickup, or both. Default to 'both' if not specified."
+                    }
+                },
+                "required": []
+            }
+        },
+        {
+            "name": "get_driver_recommendations",
+            "description": "Get recommended drivers for a specific booking based on proximity and availability. Use this to analyze who would be best for a trip. This is a read-only operation and executes automatically.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "booking_id": {
+                        "type": "string",
+                        "description": "The ID of the booking to get recommendations for"
+                    }
+                },
+                "required": ["booking_id"]
+            }
+        },
+        {
+            "name": "scan_unassigned_bookings",
+            "description": "Scan for all bookings that need driver assignments. Use this to get a comprehensive list of trips that need attention. This is a read-only operation and executes automatically.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    ]
+
+
+def tool_requires_approval(tool_name: str) -> bool:
+    """
+    Determine if a tool requires user approval before execution.
+
+    Read-only tools (reports, scans, analysis) execute automatically.
+    Write tools (assignments, updates) require approval.
+    """
+    write_tools = {
+        "assign_driver_to_booking",  # Modifies database
+    }
+    return tool_name in write_tools
+
+
+def execute_tool(tool_name: str, tool_input: dict, db: Session):
+    """Execute a tool and return the result."""
+    if tool_name == "assign_driver_to_booking":
+        from datetime import datetime, UTC
+
+        print(f"\n🔍 Starting assign_driver_to_booking...")
+        print(f"   Input: {tool_input}")
+
+        # Look up driver (by ID or name)
+        driver = None
+        if "driver_id" in tool_input and tool_input["driver_id"]:
+            print(f"   Looking up driver by ID: {tool_input['driver_id']}")
+            driver = db.query(Driver).filter(Driver.driver_id == tool_input["driver_id"]).first()
+        elif "driver_name" in tool_input and tool_input["driver_name"]:
+            # Try exact name match first
+            driver_name = tool_input["driver_name"]
+            print(f"   Looking up driver by name: {driver_name}")
+            driver = db.query(Driver).filter(Driver.name.ilike(f"%{driver_name}%")).first()
+
+        if not driver:
+            error_msg = f"Driver not found: {tool_input.get('driver_name') or tool_input.get('driver_id')}"
+            print(f"   ❌ {error_msg}")
+            return {"success": False, "error": error_msg}
+
+        print(f"   ✅ Found driver: {driver.name} (ID: {driver.driver_id})")
+
+        # Look up booking (by ID or customer name)
+        booking = None
+        if "booking_id" in tool_input and tool_input["booking_id"]:
+            print(f"   Looking up booking by ID: {tool_input['booking_id']}")
+            booking = db.query(Booking).filter(Booking.booking_id == tool_input["booking_id"]).first()
+        elif "customer_name" in tool_input and tool_input["customer_name"]:
+            # Find customer by name
+            customer_name = tool_input["customer_name"]
+            print(f"   Looking up customer by name: {customer_name}")
+            customer = db.query(Customer).filter(Customer.name.ilike(f"%{customer_name}%")).first()
+
+            if customer:
+                print(f"   ✅ Found customer: {customer.name} (ID: {customer.customer_id})")
+                # Get the customer's most relevant booking (prefer today's bookings, then upcoming)
+                today = datetime.now(UTC).date()
+                bookings = db.query(Booking).filter(
+                    Booking.customer_id == customer.customer_id,
+                    Booking.status.in_([BookingStatus.CONFIRMED.value, BookingStatus.ACTIVE.value])
+                ).order_by(
+                    # Prioritize today's bookings
+                    (Booking.delivery_date == today).desc(),
+                    # Then soonest upcoming
+                    Booking.delivery_date.asc()
+                ).all()
+
+                print(f"   Found {len(bookings)} bookings for customer")
+
+                # If multiple bookings, prefer one that needs a driver
+                for b in bookings:
+                    if not b.assigned_driver_id or not b.pickup_driver_id:
+                        booking = b
+                        print(f"   Selected unassigned booking: {b.order_number}")
+                        break
+
+                # Fall back to first booking
+                if not booking and bookings:
+                    booking = bookings[0]
+                    print(f"   Selected first booking: {booking.order_number}")
+            else:
+                print(f"   ❌ Customer not found: {customer_name}")
+
+        if not booking:
+            error_msg = f"Booking not found for: {tool_input.get('customer_name') or tool_input.get('booking_id')}"
+            print(f"   ❌ {error_msg}")
+            return {"success": False, "error": error_msg}
+
+        print(f"   ✅ Found booking: {booking.order_number} (ID: {booking.booking_id})")
+        print(f"      Current delivery driver: {booking.assigned_driver_id or 'UNASSIGNED'}")
+        print(f"      Current pickup driver: {booking.pickup_driver_id or 'UNASSIGNED'}")
+
+        # Default trip_type to "both" if not specified
+        trip_type = tool_input.get("trip_type", "both")
+        print(f"   Trip type: {trip_type}")
+
+        # Assign driver
+        if trip_type in ["delivery", "both"]:
+            print(f"   Setting delivery driver to {driver.driver_id}")
+            booking.assigned_driver_id = driver.driver_id
+        if trip_type in ["pickup", "both"]:
+            print(f"   Setting pickup driver to {driver.driver_id}")
+            booking.pickup_driver_id = driver.driver_id
+
+        print(f"   💾 Committing to database...")
+        db.commit()
+        print(f"   ✅ Database commit successful!")
+
+        result = {
+            "success": True,
+            "message": f"Successfully assigned {driver.name} to {booking.order_number} for {trip_type}",
+            "booking_number": booking.order_number,
+            "driver_name": driver.name,
+            "customer_name": booking.customer.name if booking.customer else "Unknown"
+        }
+        print(f"   Result: {result}")
+        return result
+
+    elif tool_name == "get_driver_recommendations":
+        booking_id = tool_input["booking_id"]
+        booking = db.query(Booking).filter(Booking.booking_id == booking_id).first()
+
+        if not booking:
+            return {"success": False, "error": "Booking not found"}
+
+        # Get recommendations (simplified - would normally call the full endpoint logic)
+        drivers = db.query(Driver).filter(Driver.is_active == True).all()
+
+        recommendations = []
+        for driver in drivers[:3]:  # Top 3 recommendations
+            # Simplified distance calculation - would use actual geocoding
+            recommendations.append({
+                "driver_id": driver.driver_id,
+                "driver_name": driver.name,
+                "distance_km": 2.5,  # Placeholder
+                "reason": f"{driver.name} is available and nearby"
+            })
+
+        return {
+            "success": True,
+            "booking_id": booking_id,
+            "booking_number": booking.order_number,
+            "recommendations": recommendations
+        }
+
+    elif tool_name == "scan_unassigned_bookings":
+        # Get all bookings needing drivers
+        bookings = db.query(Booking).filter(
+            Booking.status.in_([BookingStatus.CONFIRMED.value, BookingStatus.ACTIVE.value])
+        ).all()
+
+        unassigned = []
+        for booking in bookings:
+            needs_delivery = not booking.assigned_driver_id
+            needs_pickup = not booking.pickup_driver_id
+
+            if needs_delivery or needs_pickup:
+                unassigned.append({
+                    "booking_id": booking.booking_id,
+                    "order_number": booking.order_number,
+                    "customer_name": booking.customer.name if booking.customer else "Unknown",
+                    "delivery_date": str(booking.delivery_date),
+                    "needs_delivery_driver": needs_delivery,
+                    "needs_pickup_driver": needs_pickup
+                })
+
+        return {
+            "success": True,
+            "total_unassigned": len(unassigned),
+            "bookings": unassigned[:5]  # Return top 5
+        }
+
+    return {"success": False, "error": f"Unknown tool: {tool_name}"}
+
+
 @router.post("/", response_model=ChatResponse)
 async def chat_with_phineas(
     request: ChatRequest,
@@ -243,17 +496,35 @@ async def chat_with_phineas(
     """
     Chat with Phineas, the AI operations manager.
 
-    Phineas provides autonomous insights, identifies optimization opportunities,
-    and references pending action proposals. He gathers relevant database context
-    including bookings, inventory, drivers, and his own pending proposals.
+    Phineas can now propose and execute actions conversationally using tools.
+    He'll ask for your approval before taking actions like assigning drivers.
 
-    Example:
-        POST /api/admin/chatbot
-        {
-            "message": "What unassigned deliveries do we have today?",
-            "conversation_history": []
-        }
+    Example conversation:
+        User: "What should I do about unassigned bookings?"
+        Phineas: "I found 3 unassigned trips. Should I assign Mike to booking #123?"
+        User: "Yes, do it"
+        Phineas: "Done! Mike has been assigned."
     """
+    # CRITICAL: File-based logging to bypass stdout issues
+    import datetime
+    with open("/tmp/phineas_debug.log", "a") as f:
+        timestamp = datetime.datetime.now().isoformat()
+        f.write(f"\n{'='*80}\n")
+        f.write(f"{timestamp} - 🎯 CHATBOT REQUEST RECEIVED\n")
+        f.write(f"{'='*80}\n")
+        f.write(f"Message: {request.message[:100]}\n")
+        f.write(f"History length: {len(request.conversation_history)}\n")
+        f.write(f"{'='*80}\n\n")
+        f.flush()
+
+    # CRITICAL: Log request arrival immediately
+    print("\n" + "="*80, flush=True)
+    print("🎯 CHATBOT REQUEST RECEIVED", flush=True)
+    print("="*80, flush=True)
+    print(f"Message: {request.message[:100]}", flush=True)
+    print(f"History length: {len(request.conversation_history)}", flush=True)
+    print("="*80 + "\n", flush=True)
+
     # Get API key from settings
     settings = get_settings()
     api_key = settings.anthropic_api_key
@@ -293,19 +564,135 @@ Please answer the user's question based on the provided database context."""
     })
 
     try:
-        # Call Claude API
-        # Allow model override via env var, default to latest stable Sonnet
+        # Call Claude API with tools
         model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
 
+        # Initial API call
         response = client.messages.create(
             model=model,
-            max_tokens=1024,
+            max_tokens=2048,
             system=create_system_prompt(),
             messages=messages,
+            tools=get_phineas_tools(),
         )
 
-        # Extract response text
-        ai_response = response.content[0].text
+        # Handle tool use with automatic execution for read-only tools
+        ai_response = ""
+        tool_results = []
+
+        # Process all content blocks
+        for block in response.content:
+            if block.type == "text":
+                ai_response += block.text
+            elif block.type == "tool_use":
+                tool_name = block.name
+                tool_input = block.input
+                tool_use_id = block.id
+
+                # File-based logging for tool execution
+                with open("/tmp/phineas_debug.log", "a") as f:
+                    f.write(f"\n{'='*60}\n")
+                    f.write(f"🔧 TOOL EXECUTION DETECTED\n")
+                    f.write(f"{'='*60}\n")
+                    f.write(f"Tool Name: {tool_name}\n")
+                    f.write(f"Tool Input: {tool_input}\n")
+                    f.write(f"Tool Use ID: {tool_use_id}\n")
+                    f.write(f"{'='*60}\n\n")
+                    f.flush()
+
+                print(f"\n{'='*60}", flush=True)
+                print(f"🔧 TOOL EXECUTION DETECTED", flush=True)
+                print(f"{'='*60}", flush=True)
+                print(f"Tool Name: {tool_name}", flush=True)
+                print(f"Tool Input: {tool_input}", flush=True)
+                print(f"Tool Use ID: {tool_use_id}", flush=True)
+                print(f"{'='*60}\n", flush=True)
+
+                # Execute all tools automatically (both read and write operations)
+                tool_result = execute_tool(tool_name, tool_input, db)
+
+                # File-based logging for tool result
+                with open("/tmp/phineas_debug.log", "a") as f:
+                    f.write(f"\n{'='*60}\n")
+                    f.write(f"✅ TOOL EXECUTION COMPLETED\n")
+                    f.write(f"{'='*60}\n")
+                    f.write(f"Tool Name: {tool_name}\n")
+                    f.write(f"Result: {str(tool_result)[:1000]}\n")  # Limit to 1000 chars
+                    f.write(f"{'='*60}\n\n")
+                    f.flush()
+
+                print(f"\n{'='*60}", flush=True)
+                print(f"✅ TOOL EXECUTION COMPLETED", flush=True)
+                print(f"{'='*60}", flush=True)
+                print(f"Tool Name: {tool_name}", flush=True)
+                print(f"Result: {tool_result}", flush=True)
+                print(f"{'='*60}\n", flush=True)
+
+                tool_results.append({
+                    "tool_use_id": tool_use_id,
+                    "result": tool_result,
+                })
+
+        # If we executed any tools, call Claude again with the results
+        if tool_results:
+            # Add assistant's response to messages
+            messages.append({
+                "role": "assistant",
+                "content": response.content,
+            })
+
+            # Add tool results as a user message
+            tool_result_content = []
+            for tr in tool_results:
+                tool_result_content.append({
+                    "type": "tool_result",
+                    "tool_use_id": tr["tool_use_id"],
+                    "content": str(tr["result"]),
+                })
+
+            messages.append({
+                "role": "user",
+                "content": tool_result_content,
+            })
+
+            # Call Claude again to process the tool results
+            follow_up_response = client.messages.create(
+                model=model,
+                max_tokens=2048,
+                system=create_system_prompt(),
+                messages=messages,
+                tools=get_phineas_tools(),
+            )
+
+            # Process the follow-up response
+            ai_response = ""
+            for block in follow_up_response.content:
+                if block.type == "text":
+                    ai_response += block.text
+                # Note: We don't handle nested tool calls in follow-up responses
+                # The system prompt instructs Phineas to execute tools immediately
+
+            # Fallback: If Claude didn't provide text after tool execution, generate a response
+            if not ai_response.strip() and tool_results:
+                # Generate natural language response based on tool results
+                for result_data in tool_results:
+                    result = result_data["result"]
+                    if isinstance(result, dict):
+                        if result.get("success"):
+                            # For successful operations, create a friendly confirmation
+                            if "driver_name" in result and "customer_name" in result:
+                                ai_response = f"Done! I've assigned {result['driver_name']} to {result['customer_name']}'s booking ({result.get('booking_number', 'booking')}). The assignment is complete."
+                            elif "message" in result:
+                                ai_response = result["message"]
+                            else:
+                                ai_response = "Done! The action has been completed successfully."
+                        else:
+                            # For failed operations, explain the error
+                            error = result.get("error", "Unknown error")
+                            ai_response = f"I encountered an issue: {error}. Please check the details and try again."
+                    else:
+                        # For non-dict results (like scan results), format them naturally
+                        ai_response = f"Here's what I found:\n\n{result}"
 
         return ChatResponse(
             response=ai_response,

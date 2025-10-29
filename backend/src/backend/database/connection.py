@@ -42,5 +42,11 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+        # Commit any uncommitted changes when request succeeds
+        db.commit()
+    except Exception:
+        # Roll back on any exception
+        db.rollback()
+        raise
     finally:
         db.close()

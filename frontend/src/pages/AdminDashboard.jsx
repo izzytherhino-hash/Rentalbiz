@@ -653,11 +653,14 @@ export default function AdminDashboard() {
             {/* Day Details Sidebar */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-medium text-gray-800 mb-4">
-                {new Date(selectedDate).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric'
-                })}
+                {(() => {
+                  const [year, month, day] = selectedDate.split('-')
+                  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric'
+                  })
+                })()}
               </h3>
 
               {selectedDayBookings.length === 0 ? (
@@ -1574,7 +1577,10 @@ export default function AdminDashboard() {
                         Status
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Driver
+                        Delivery Driver
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Pickup Driver
                       </th>
                     </tr>
                   </thead>
@@ -1613,6 +1619,9 @@ export default function AdminDashboard() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {drivers.find(d => d.driver_id === booking.assigned_driver_id)?.name || 'Unassigned'}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {drivers.find(d => d.driver_id === booking.pickup_driver_id)?.name || 'Unassigned'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1627,9 +1636,12 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-lg border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="font-serif text-xl font-light text-gray-800">
-                Deliveries for {new Date(selectedDate).toLocaleDateString('en-US', {
-                  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-                })}
+                Deliveries for {(() => {
+                  const [year, month, day] = selectedDate.split('-')
+                  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+                  })
+                })()}
               </h2>
             </div>
             <div className="overflow-x-auto">
@@ -1715,9 +1727,12 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-lg border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="font-serif text-xl font-light text-gray-800">
-                Pickups for {new Date(selectedDate).toLocaleDateString('en-US', {
-                  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-                })}
+                Pickups for {(() => {
+                  const [year, month, day] = selectedDate.split('-')
+                  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+                  })
+                })()}
               </h2>
             </div>
             <div className="overflow-x-auto">
@@ -2457,7 +2472,7 @@ export default function AdminDashboard() {
       )}
 
       {/* AI Chatbot */}
-      <Chatbot />
+      <Chatbot onDataChange={fetchDashboardData} />
     </div>
   )
 }

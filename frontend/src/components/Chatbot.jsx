@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { MessageCircle, X, Send, Loader, Lightbulb, ArrowUp } from 'lucide-react'
 import { chatbotAPI, phineasAPI } from '../services/api'
 
-export default function Chatbot() {
+export default function Chatbot({ onDataChange }) {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState([
     {
@@ -16,6 +16,7 @@ export default function Chatbot() {
   const [pendingProposals, setPendingProposals] = useState([])
   const [loadingProposals, setLoadingProposals] = useState(false)
   const messagesEndRef = useRef(null)
+  const inputRef = useRef(null)
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -30,6 +31,10 @@ export default function Chatbot() {
   useEffect(() => {
     if (isOpen) {
       fetchPendingProposals()
+      // Focus input when chat opens
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
     }
   }, [isOpen])
 
@@ -54,7 +59,14 @@ export default function Chatbot() {
 
   const handleSendMessage = async (e) => {
     e.preventDefault()
-    if (!inputMessage.trim() || isLoading) return
+    console.log('🎯 handleSendMessage called')
+    console.log('  inputMessage:', inputMessage)
+    console.log('  isLoading:', isLoading)
+
+    if (!inputMessage.trim() || isLoading) {
+      console.log('❌ Early return - empty input or loading')
+      return
+    }
 
     const userMessage = inputMessage.trim()
     setInputMessage('')
@@ -65,15 +77,31 @@ export default function Chatbot() {
     setMessages(newMessages)
     setIsLoading(true)
 
+    console.log('📤 About to call chatbotAPI.sendMessage')
+    console.log('  Message:', userMessage)
+    console.log('  History length:', messages.filter(m => m.role !== 'system').length)
+
     try {
       // Send message to backend
+      console.log('🌐 Calling API...')
       const response = await chatbotAPI.sendMessage(
         userMessage,
         messages.filter(m => m.role !== 'system') // Don't include system messages in history
       )
+      console.log('✅ API response received:', response)
 
       // Add AI response to chat
       setMessages([...newMessages, { role: 'assistant', content: response.response }])
+
+      // Trigger data refresh if callback provided
+      if (onDataChange) {
+        onDataChange()
+      }
+
+      // Focus input after response
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
     } catch (err) {
       console.error('Chatbot error:', err)
 
@@ -219,6 +247,7 @@ export default function Chatbot() {
           <form onSubmit={handleSendMessage} className="border-t border-gray-200 p-3">
             <div className="flex gap-2">
               <input
+                ref={inputRef}
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
