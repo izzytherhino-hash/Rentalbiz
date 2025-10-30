@@ -680,7 +680,7 @@ async def clear_and_reseed(db: Session = Depends(get_db)):
         # Seed inventory photos
         print("📸 Seeding inventory photos...")
         from backend.database.seed import seed_inventory_photos
-        photos_created = seed_inventory_photos(db, clear_existing=False)  # Photos already cleared
+        photos_created = seed_inventory_photos(db)
         print(f"✅ Seeded {photos_created} inventory photos")
 
         # Get counts after seeding
@@ -1067,4 +1067,98 @@ async def add_service_items(db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error adding service items: {str(e)}"
+        )
+
+
+@router.post("/update-scraped-categories")
+async def update_scraped_categories(db: Session = Depends(get_db)):
+    """
+    Update categories for scraped inventory items.
+
+    This endpoint remaps:
+    - "bounce house", "bounce houses" -> "Poufs and Pillows"
+    - "tents", "tent", "Tents and Canopies", "tent and canopy", "canopies", "canopy" -> "Marquee Lights"
+
+    Returns:
+        dict: Summary of updated items
+    """
+    try:
+        # Define all bounce house category variations
+        bounce_house_categories = ["bounce house", "bounce houses", "Bounce House", "Bounce Houses"]
+
+        # Define all tent/canopy category variations
+        tent_categories = [
+            "tents",
+            "tent",
+            "Tents and Canopies",
+            "tents and canopies",
+            "Tents & Canopies",  # Handle ampersand version from scraper
+            "tents & canopies",
+            "Tent and Canopy",
+            "tent and canopy",
+            "Tent & Canopy",  # Handle ampersand version
+            "tent & canopy",
+            "canopies",
+            "canopy",
+            "Canopies",
+            "Canopy"
+        ]
+
+        # Update all bounce house variations -> Poufs and Pillows
+        bounce_house_items = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.category.in_(bounce_house_categories))
+            .all()
+        )
+
+        for item in bounce_house_items:
+            item.category = "Poufs and Pillows"
+
+        # Update all tent/canopy variations -> Marquee Lights
+        tent_items = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.category.in_(tent_categories))
+            .all()
+        )
+
+        for item in tent_items:
+            item.category = "Marquee Lights"
+
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Successfully updated scraped inventory categories",
+            "summary": {
+                "bounce_house_to_poufs_and_pillows": len(bounce_house_items),
+                "tents_to_marquee_lights": len(tent_items),
+                "total_updated": len(bounce_house_items) + len(tent_items)
+            },
+            "updated_items": {
+                "poufs_and_pillows": [
+                    {
+                        "id": item.inventory_item_id,
+                        "name": item.name,
+                        "old_category": item.category,
+                        "new_category": "Poufs and Pillows"
+                    }
+                    for item in bounce_house_items
+                ],
+                "marquee_lights": [
+                    {
+                        "id": item.inventory_item_id,
+                        "name": item.name,
+                        "old_category": item.category,
+                        "new_category": "Marquee Lights"
+                    }
+                    for item in tent_items
+                ]
+            }
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating categories: {str(e)}"
         )
