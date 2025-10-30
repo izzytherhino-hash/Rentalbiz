@@ -6,6 +6,7 @@ import InventoryModal from '../components/InventoryModal'
 import InventoryCalendarModal from '../components/InventoryCalendarModal'
 import DriverCalendarModal from '../components/DriverCalendarModal'
 import InventoryMap from '../components/InventoryMap'
+import PartnerManagement from '../components/PartnerManagement'
 import {
   generateCalendarDays,
   getBookingsForDate,
@@ -91,17 +92,26 @@ export default function AdminDashboard() {
 
       setBookings(bookingsData)
 
-      // Prepend full backend URL to photo URLs (for uploaded photos)
-      const inventoryWithFullUrls = inventoryData.map(item => ({
-        ...item,
-        photos: item.photos?.map(photo => ({
-          ...photo,
-          image_url: photo.image_url.startsWith('http')
-            ? photo.image_url
-            : `http://localhost:8000${photo.image_url}`
+      // Extract items array from response (handles both {items: [...]} and [...] formats)
+      const inventoryItems = Array.isArray(inventoryData) ? inventoryData : (inventoryData?.items || [])
+
+      // Ensure inventoryItems is an array before processing
+      if (!Array.isArray(inventoryItems)) {
+        console.error('[AdminDashboard] Expected array but got:', typeof inventoryItems, inventoryData)
+        setInventory([])
+      } else {
+        // Prepend full backend URL to photo URLs (for uploaded photos)
+        const inventoryWithFullUrls = inventoryItems.map(item => ({
+          ...item,
+          photos: item.photos?.map(photo => ({
+            ...photo,
+            image_url: photo.image_url.startsWith('http')
+              ? photo.image_url
+              : `http://localhost:8000${photo.image_url}`
+          }))
         }))
-      }))
-      setInventory(inventoryWithFullUrls)
+        setInventory(inventoryWithFullUrls)
+      }
       setDrivers(driversData)
       setStats(statsData)
       setConflicts(conflictsData.conflicts || [])
@@ -134,7 +144,13 @@ export default function AdminDashboard() {
   })
 
   // Get unique categories for filter dropdown
-  const inventoryCategories = [...new Set(inventory.map(item => item.category))].sort()
+  const inventoryCategories = [
+    ...new Set(
+      inventory
+        .map(item => item.category)
+        .filter(category => category != null && category !== '')
+    )
+  ].sort()
 
   // Paginate for cards view
   const totalPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE)
@@ -488,6 +504,17 @@ export default function AdminDashboard() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setView('partners')}
+              className={`py-4 px-2 border-b-2 font-medium text-sm transition ${
+                view === 'partners'
+                  ? 'border-yellow-400 text-yellow-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Users className="w-4 h-4 inline mr-2" />
+              Partners
+            </button>
           </div>
         </div>
       </div>
@@ -604,7 +631,7 @@ export default function AdminDashboard() {
                 ))}
                 {calendarDays.map((day, idx) => (
                   <div
-                    key={idx}
+                    key={day?.dateStr || `empty-${idx}`}
                     onClick={() => day && setSelectedDate(day.dateStr)}
                     className={`min-h-20 border rounded-lg p-2 cursor-pointer transition ${
                       day
@@ -872,113 +899,167 @@ export default function AdminDashboard() {
 
             {/* Report View - Table Format */}
             {inventoryViewMode === 'report' && (
-              <div className="overflow-x-auto">
+              <>
                 {filteredInventory.length === 0 ? (
                   <div className="text-center py-12">
                     <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-600">No inventory items found</p>
                   </div>
                 ) : (
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Item
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Category
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Price
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Warehouse
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredInventory.map((item) => (
-                        <tr
-                          key={item.inventory_item_id}
-                          onClick={() => openCalendarModal(item)}
-                          className="hover:bg-gray-50 cursor-pointer transition"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="h-10 w-10 flex-shrink-0">
-                                {item.photos && item.photos[0] ? (
-                                  <img
-                                    className="h-10 w-10 rounded object-cover"
-                                    src={item.photos.find(p => p.is_thumbnail)?.image_url || item.photos[0]?.image_url}
-                                    alt={item.name}
-                                    onError={(e) => {
-                                      e.target.style.display = 'none'
-                                    }}
-                                  />
-                                ) : (
-                                  <div className="h-10 w-10 rounded bg-gray-100 flex items-center justify-center">
-                                    <Package className="w-5 h-5 text-gray-400" />
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Item
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Category
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Price
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Warehouse
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {paginatedInventory.map((item) => (
+                            <tr
+                              key={item.inventory_item_id}
+                              onClick={() => openCalendarModal(item)}
+                              className="hover:bg-gray-50 cursor-pointer transition"
+                            >
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <div className="h-10 w-10 flex-shrink-0">
+                                    {(item.photos && item.photos[0]) || item.image_url ? (
+                                      <img
+                                        className="h-10 w-10 rounded object-cover"
+                                        src={item.photos?.find(p => p.is_thumbnail)?.image_url || item.photos?.[0]?.image_url || item.image_url}
+                                        alt={item.name}
+                                        onError={(e) => {
+                                          e.target.style.display = 'none'
+                                        }}
+                                      />
+                                    ) : (
+                                      <div className="h-10 w-10 rounded bg-gray-100 flex items-center justify-center">
+                                        <Package className="w-5 h-5 text-gray-400" />
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                              <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-900">{item.name}</div>
-                                {item.description && (
-                                  <div className="text-xs text-gray-500 truncate max-w-xs">{item.description}</div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                            {item.category}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              item.status === 'available'
-                                ? 'bg-green-100 text-green-800'
-                                : item.status === 'rented'
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : item.status === 'maintenance'
-                                ? 'bg-gray-100 text-gray-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}>
-                              {item.status.toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            ${parseFloat(item.base_price).toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                            {warehouses.find(w => w.warehouse_id === item.current_warehouse_id)?.name || 'Unknown'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                                  <div className="ml-4">
+                                    <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                                    {item.description && (
+                                      <div className="text-xs text-gray-500 truncate max-w-xs">{item.description}</div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {item.category}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                  item.status === 'available'
+                                    ? 'bg-green-100 text-green-800'
+                                    : item.status === 'rented'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : item.status === 'maintenance'
+                                    ? 'bg-gray-100 text-gray-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {item.status ? item.status.toUpperCase() : 'UNKNOWN'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                ${parseFloat(item.base_price).toFixed(2)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {warehouses.find(w => w.warehouse_id === item.current_warehouse_id)?.name || 'Unknown'}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => openInventoryModal(item)}
+                                    className="text-gray-600 hover:text-gray-800"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteInventoryItem(item.inventory_item_id)}
+                                    className="text-red-600 hover:text-red-800"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between border-t border-gray-200 pt-4 mt-4">
+                        <div className="text-sm text-gray-600">
+                          Showing {(inventoryPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(inventoryPage * ITEMS_PER_PAGE, filteredInventory.length)} of {filteredInventory.length} items
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setInventoryPage(inventoryPage - 1)}
+                            disabled={inventoryPage === 1}
+                            className={`px-3 py-1.5 rounded-lg flex items-center gap-1 text-sm transition ${
+                              inventoryPage === 1
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                            Previous
+                          </button>
+                          <div className="flex items-center gap-1">
+                            {[...Array(totalPages)].map((_, idx) => (
                               <button
-                                onClick={() => openInventoryModal(item)}
-                                className="text-gray-600 hover:text-gray-800"
+                                key={`page-${idx + 1}`}
+                                onClick={() => setInventoryPage(idx + 1)}
+                                className={`px-3 py-1.5 rounded-lg text-sm transition ${
+                                  inventoryPage === idx + 1
+                                    ? 'bg-yellow-400 text-gray-800'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
                               >
-                                <Edit className="w-4 h-4" />
+                                {idx + 1}
                               </button>
-                              <button
-                                onClick={() => handleDeleteInventoryItem(item.inventory_item_id)}
-                                className="text-red-600 hover:text-red-800"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setInventoryPage(inventoryPage + 1)}
+                            disabled={inventoryPage === totalPages}
+                            className={`px-3 py-1.5 rounded-lg flex items-center gap-1 text-sm transition ${
+                              inventoryPage === totalPages
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            Next
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-              </div>
+              </>
             )}
 
             {/* Cards View - 3 Column Grid with Pagination */}
@@ -992,8 +1073,9 @@ export default function AdminDashboard() {
                 ) : (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                      {paginatedInventory.map(item => {
+                      {paginatedInventory.map((item, index) => {
                         const thumbnail = item.photos?.find(p => p.is_thumbnail) || item.photos?.[0]
+                        const thumbnailUrl = thumbnail?.image_url || item.image_url
                         return (
                           <div
                             key={item.inventory_item_id}
@@ -1002,10 +1084,10 @@ export default function AdminDashboard() {
                             style={{ cursor: "pointer" }}
                           >
                             {/* Thumbnail Image */}
-                            {thumbnail && (
+                            {thumbnailUrl && (
                               <div className="w-full h-48 bg-gray-100 flex items-center justify-center">
                                 <img
-                                  src={thumbnail.image_url}
+                                  src={thumbnailUrl}
                                   alt={item.name}
                                   className="w-full h-full object-cover"
                                   onError={(e) => {
@@ -1050,7 +1132,9 @@ export default function AdminDashboard() {
                               <div className="grid grid-cols-2 gap-2 py-3 border-t border-gray-200">
                                 <div>
                                   <div className="text-sm text-gray-600">Price</div>
-                                  <div className="text-lg font-medium text-gray-800">${item.base_price}</div>
+                                  <div className="text-lg font-medium text-gray-800">
+                                    ${item.base_price != null ? parseFloat(item.base_price).toFixed(2) : '0.00'}
+                                  </div>
                                 </div>
                                 <div>
                                   <div className="text-sm text-gray-600">Warehouse</div>
@@ -1124,7 +1208,7 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-1">
                             {[...Array(totalPages)].map((_, idx) => (
                               <button
-                                key={idx}
+                                key={`page-${idx + 1}`}
                                 onClick={() => setInventoryPage(idx + 1)}
                                 className={`px-3 py-1.5 rounded-lg text-sm transition ${
                                   inventoryPage === idx + 1
@@ -1347,7 +1431,7 @@ export default function AdminDashboard() {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {conflicts.map((conflict, idx) => (
                       <tr
-                        key={idx}
+                        key={`${conflict.item_name}-${conflict.booking1_id}-${conflict.booking2_id}`}
                         className="hover:bg-red-50 cursor-pointer transition bg-red-50"
                       >
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-red-900">
@@ -1378,6 +1462,11 @@ export default function AdminDashboard() {
               )}
             </div>
           </div>
+        )}
+
+        {/* Partners View */}
+        {view === 'partners' && (
+          <PartnerManagement />
         )}
 
         {/* Unassigned Trips View */}
@@ -1422,7 +1511,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {unassignedTrips.map((trip, idx) => {
+                    {unassignedTrips.map((trip) => {
                       const bookingRecommendations = recommendations[trip.booking_id] || []
                       let topRecommendation = bookingRecommendations[0]
 
@@ -1452,7 +1541,7 @@ export default function AdminDashboard() {
                       })
 
                       return (
-                        <tr key={`${trip.booking_id}-${trip.tripType}-${idx}`} className="hover:bg-gray-50 transition">
+                        <tr key={`${trip.booking_id}-${trip.tripType}`} className="hover:bg-gray-50 transition">
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
                             {trip.customer_name || 'N/A'}
                           </td>
@@ -1945,7 +2034,9 @@ export default function AdminDashboard() {
                   </div>
                   <div>
                     <span className="text-xs text-gray-600 uppercase tracking-wide block mb-1">Daily Rate</span>
-                    <span className="text-sm font-medium text-gray-800">${selectedItem.base_price}</span>
+                    <span className="text-sm font-medium text-gray-800">
+                      ${selectedItem.base_price != null ? parseFloat(selectedItem.base_price).toFixed(2) : '0.00'}
+                    </span>
                   </div>
                   <div>
                     <span className="text-xs text-gray-600 uppercase tracking-wide block mb-1">Status</span>
@@ -1995,7 +2086,7 @@ export default function AdminDashboard() {
 
                   return (
                     <div
-                      key={idx}
+                      key={day?.dateStr || `empty-${idx}`}
                       className={`min-h-20 border rounded-lg p-2 transition ${
                         day
                           ? isPast
@@ -2205,7 +2296,7 @@ export default function AdminDashboard() {
                   <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-3">Items</h3>
                   <div className="space-y-2">
                     {selectedBooking.booking_items.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded">
+                      <div key={item.booking_item_id || `${item.inventory_item_id}-${idx}`} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded">
                         <div className="flex items-center">
                           <span className="w-2 h-2 bg-yellow-400 rounded-full mr-3"></span>
                           <div>

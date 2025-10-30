@@ -147,11 +147,29 @@ export const inventoryAPI = {
   },
 
   /**
-   * List all inventory items.
+   * List all inventory items with pagination support.
+   *
+   * The backend now returns paginated responses. This method handles both
+   * the old array format (for backwards compatibility) and the new paginated format.
    */
   listItems: async (filters = {}) => {
-    const params = new URLSearchParams(filters);
-    return apiFetch(`/api/inventory?${params}`);
+    // Add default pagination parameters if not provided
+    const paginationDefaults = {
+      skip: 0,
+      limit: 200,  // Get all items for now (max 200)
+      ...filters
+    };
+    const params = new URLSearchParams(paginationDefaults);
+    const response = await apiFetch(`/api/inventory?${params}`);
+
+    // Handle paginated response format
+    if (response && typeof response === 'object' && 'items' in response) {
+      // New paginated format: { items: [...], total: 100, skip: 0, limit: 50, has_more: true }
+      return response.items;
+    }
+
+    // Old format: just an array of items (for backwards compatibility)
+    return response;
   },
 
   /**
@@ -398,6 +416,132 @@ export const phineasAPI = {
     return apiFetch('/api/admin/phineas/execute-assignment', {
       method: 'POST',
       body: JSON.stringify({ proposal_id: proposalId }),
+    });
+  },
+};
+
+// Partner API
+export const partnerAPI = {
+  /**
+   * List all partners.
+   */
+  listPartners: async (filters = {}) => {
+    const params = new URLSearchParams(filters);
+    return apiFetch(`/api/partners?${params}`);
+  },
+
+  /**
+   * Create a new partner.
+   */
+  createPartner: async (partnerData) => {
+    return apiFetch('/api/partners/', {
+      method: 'POST',
+      body: JSON.stringify(partnerData),
+    });
+  },
+
+  /**
+   * Get partner details.
+   */
+  getPartner: async (partnerId) => {
+    return apiFetch(`/api/partners/${partnerId}`);
+  },
+
+  /**
+   * Update partner information.
+   */
+  updatePartner: async (partnerId, updateData) => {
+    return apiFetch(`/api/partners/${partnerId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updateData),
+    });
+  },
+
+  /**
+   * Delete a partner.
+   */
+  deletePartner: async (partnerId) => {
+    return apiFetch(`/api/partners/${partnerId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /**
+   * Trigger inventory sync for a partner.
+   */
+  syncInventory: async (partnerId, warehouseLocationId = null, applyMarkup = true) => {
+    const body = {};
+    if (warehouseLocationId) body.warehouse_location_id = warehouseLocationId;
+    body.apply_markup = applyMarkup;
+
+    return apiFetch(`/api/inventory/sync/${partnerId}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  /**
+   * Get sync logs.
+   */
+  getSyncLogs: async (partnerId = null, limit = 50) => {
+    const params = new URLSearchParams();
+    if (partnerId) params.append('partner_id', partnerId);
+    params.append('limit', limit.toString());
+    return apiFetch(`/api/inventory/sync/logs?${params}`);
+  },
+
+  /**
+   * Get specific sync log.
+   */
+  getSyncLog: async (syncLogId) => {
+    return apiFetch(`/api/inventory/sync/logs/${syncLogId}`);
+  },
+};
+
+// Warehouse Location API (nested under Partner)
+export const warehouseLocationAPI = {
+  /**
+   * List all warehouse locations for a partner.
+   */
+  listLocations: async (partnerId, isActive = null) => {
+    const params = new URLSearchParams();
+    if (isActive !== null) params.append('is_active', isActive);
+    return apiFetch(`/api/partners/${partnerId}/locations?${params}`);
+  },
+
+  /**
+   * Get a specific warehouse location.
+   */
+  getLocation: async (partnerId, locationId) => {
+    return apiFetch(`/api/partners/${partnerId}/locations/${locationId}`);
+  },
+
+  /**
+   * Create a new warehouse location for a partner.
+   */
+  createLocation: async (partnerId, locationData) => {
+    return apiFetch(`/api/partners/${partnerId}/locations`, {
+      method: 'POST',
+      body: JSON.stringify({ ...locationData, partner_id: partnerId }),
+    });
+  },
+
+  /**
+   * Update a warehouse location.
+   */
+  updateLocation: async (partnerId, locationId, updateData) => {
+    return apiFetch(`/api/partners/${partnerId}/locations/${locationId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updateData),
+    });
+  },
+
+  /**
+   * Delete a warehouse location.
+   */
+  deleteLocation: async (partnerId, locationId) => {
+    return apiFetch(`/api/partners/${partnerId}/locations/${locationId}`, {
+      method: 'DELETE',
     });
   },
 };

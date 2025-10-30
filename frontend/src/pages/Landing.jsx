@@ -19,8 +19,15 @@ export default function Landing() {
         const response = await fetch(`${API_BASE_URL}/api/inventory/`)
         console.log('[Landing] Response status:', response.status)
         if (response.ok) {
-          const items = await response.json()
-          console.log('[Landing] Received items:', items.length)
+          const data = await response.json()
+          console.log('[Landing] Received data:', data)
+          // Extract items array from response (handles both {items: [...]} and [...] formats)
+          const items = Array.isArray(data) ? data : (data.items || [])
+          if (!Array.isArray(items)) {
+            console.error('[Landing] Expected array but got:', typeof items)
+            return
+          }
+          console.log('[Landing] Item count:', items.length)
           // Get first 6 items with photos for featured section
           const itemsWithPhotos = items
             .filter(item => item.photos && item.photos.length > 0 && item.website_visible)

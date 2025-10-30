@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, CheckCircle, Upload, Trash2, Star, GripVertical } from 'lucide-react'
 import axios from 'axios'
 
-export default function InventoryModal({ item, warehouses, onClose, onSave }) {
+export default function InventoryModal({ item, warehouses, categories = [], onClose, onSave }) {
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -23,13 +23,15 @@ export default function InventoryModal({ item, warehouses, onClose, onSave }) {
 
   const API_URL = 'http://localhost:8000/api'
 
-  // Categories for dropdown
-  const categories = [
+  // Fallback categories if none provided (for backwards compatibility)
+  const availableCategories = categories.length > 0 ? categories : [
     'Inflatable',
     'Concession',
     'Game',
     'Table & Chairs',
     'Party Supplies',
+    'Services',
+    'Tents & Canopies',
     'Other'
   ]
 
@@ -299,7 +301,7 @@ export default function InventoryModal({ item, warehouses, onClose, onSave }) {
               }`}
             >
               <option value="">Select a category</option>
-              {categories.map(cat => (
+              {availableCategories.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>

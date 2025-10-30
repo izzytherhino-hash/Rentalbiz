@@ -422,7 +422,20 @@ async def get_booking(
     Raises:
         HTTPException: If booking not found
     """
-    booking = db.query(Booking).filter(Booking.booking_id == booking_id).first()
+    from sqlalchemy.orm import joinedload
+
+    booking = (
+        db.query(Booking)
+        .options(
+            joinedload(Booking.customer),
+            joinedload(Booking.booking_items).joinedload(BookingItem.inventory_item),
+            joinedload(Booking.assigned_driver),
+            joinedload(Booking.pickup_driver)
+        )
+        .filter(Booking.booking_id == booking_id)
+        .first()
+    )
+
     if not booking:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -456,7 +469,17 @@ async def list_bookings(
     Example:
         GET /api/bookings?status=confirmed&delivery_date=2025-10-20
     """
-    query = db.query(Booking)
+    from sqlalchemy.orm import joinedload
+
+    query = (
+        db.query(Booking)
+        .options(
+            joinedload(Booking.customer),
+            joinedload(Booking.booking_items).joinedload(BookingItem.inventory_item),
+            joinedload(Booking.assigned_driver),
+            joinedload(Booking.pickup_driver)
+        )
+    )
 
     if status:
         query = query.filter(Booking.status == status)

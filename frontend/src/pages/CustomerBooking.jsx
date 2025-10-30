@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ShoppingCart, X, Calendar, AlertCircle, Plus, Minus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { bookingAPI, inventoryAPI } from '../services/api'
 import ItemAvailabilityCalendar from '../components/ItemAvailabilityCalendar'
+import PaginatedItemGrid from '../components/PaginatedItemGrid'
 
 export default function CustomerBooking() {
   const location = useLocation()
@@ -36,6 +37,8 @@ export default function CustomerBooking() {
   const [filterCategory, setFilterCategory] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('name')
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 12
 
   // Google Maps refs
   const addressInputRef = useRef(null)
@@ -86,8 +89,8 @@ export default function CustomerBooking() {
     }
   }
 
-  // Filter and sort items
-  const getFilteredItems = () => {
+  // Filter and sort items - memoized for performance
+  const filteredItems = useMemo(() => {
     let filtered = [...items]
 
     if (filterCategory !== 'all') {
@@ -109,57 +112,73 @@ export default function CustomerBooking() {
     })
 
     return filtered
-  }
+  }, [items, filterCategory, searchQuery, sortBy])
 
-  // Cart functions
-  const addToCart = (item, quantity = 1, dates = null) => {
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE)
+
+  const paginatedItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+    return filteredItems.slice(startIndex, startIndex + ITEMS_PER_PAGE)
+  }, [filteredItems, currentPage, ITEMS_PER_PAGE])
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterCategory, searchQuery, sortBy])
+
+  // Cart functions - memoized for performance
+  const addToCart = useCallback((item, quantity = 1, dates = null) => {
     // Require dates when adding to cart
     if (!dates || !dates.delivery || !dates.pickup) {
       setError('Please select delivery and pickup dates first')
       return
     }
 
-    const existing = cart.find(c => c.item.inventory_item_id === item.inventory_item_id)
-    if (existing) {
-      setCart(cart.map(c =>
-        c.item.inventory_item_id === item.inventory_item_id
-          ? { ...c, quantity: c.quantity + quantity, dates }
-          : c
-      ))
-    } else {
-      setCart([...cart, { item, quantity, dates }])
-    }
+    setCart(prevCart => {
+      const existing = prevCart.find(c => c.item.inventory_item_id === item.inventory_item_id)
+      if (existing) {
+        return prevCart.map(c =>
+          c.item.inventory_item_id === item.inventory_item_id
+            ? { ...c, quantity: c.quantity + quantity, dates }
+            : c
+        )
+      } else {
+        return [...prevCart, { item, quantity, dates }]
+      }
+    })
     setSelectedItem(null)
     setModalDates({ delivery: null, pickup: null }) // Reset for next item
     setCurrentPhotoIndex(0) // Reset photo index
     setError(null)
-  }
+  }, [])
 
-  // Photo navigation helpers
-  const nextPhoto = () => {
+  // Photo navigation helpers - memoized
+  const nextPhoto = useCallback(() => {
     if (selectedItem && selectedItem.photos) {
       setCurrentPhotoIndex((prev) => (prev + 1) % selectedItem.photos.length)
     }
-  }
+  }, [selectedItem])
 
-  const prevPhoto = () => {
+  const prevPhoto = useCallback(() => {
     if (selectedItem && selectedItem.photos) {
       setCurrentPhotoIndex((prev) =>
         prev === 0 ? selectedItem.photos.length - 1 : prev - 1
       )
     }
-  }
+  }, [selectedItem])
 
-  const removeFromCart = (itemId) => {
-    setCart(cart.filter(c => c.item.inventory_item_id !== itemId))
-  }
+  const removeFromCart = useCallback((itemId) => {
+    setCart(prevCart => prevCart.filter(c => c.item.inventory_item_id !== itemId))
+  }, [])
 
-  const getCartTotal = () => {
+  // Cart total - memoized
+  const cartTotal = useMemo(() => {
     return cart.reduce((sum, c) => sum + (parseFloat(c.item.base_price) * c.quantity), 0)
-  }
+  }, [cart])
 
-  // Proceed to checkout (skip date selection since dates are per-item now)
-  const proceedToCheckout = () => {
+  // Proceed to checkout - memoized
+  const proceedToCheckout = useCallback(() => {
     if (cart.length === 0) {
       setError('Please add items to your cart first')
       return
@@ -172,7 +191,7 @@ export default function CustomerBooking() {
     }
     setBookingStage('customer')
     setError(null)
-  }
+  }, [cart])
 
   // Check availability for selected dates
   const checkAvailability = async () => {
@@ -362,36 +381,18 @@ export default function CustomerBooking() {
                 <p className="mt-4 text-gray-600">Loading equipment...</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {getFilteredItems().map(item => (
-                  <div key={item.inventory_item_id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                    <div className="aspect-video bg-gray-200 relative">
-                      {item.photos?.[0]?.image_url && (
-                        <img src={item.photos[0].image_url} alt={item.name} className="w-full h-full object-cover" />
-                      )}
-                    </div>
-                    <div className="p-4">
-                      <h3 className="font-semibold text-lg text-gray-800 mb-2">{item.name}</h3>
-                      <p className="text-sm text-gray-600 mb-3 line-clamp-2">{item.description}</p>
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-2xl font-bold text-gray-900">
-                          ${parseFloat(item.base_price).toFixed(2)}
-                        </span>
-                        <span className="text-sm text-gray-500">{item.category}</span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setSelectedItem(item)
-                          setCurrentPhotoIndex(0) // Reset photo index when opening modal
-                        }}
-                        className="w-full bg-yellow-400 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-yellow-500 transition-colors"
-                      >
-                        View Details & Add to Cart
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <PaginatedItemGrid
+                items={paginatedItems}
+                onItemClick={(item) => {
+                  setSelectedItem(item)
+                  setCurrentPhotoIndex(0)
+                }}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filteredItems.length}
+                itemsPerPage={ITEMS_PER_PAGE}
+              />
             )}
 
             {/* Book Items Button */}
@@ -401,7 +402,7 @@ export default function CustomerBooking() {
                   onClick={proceedToCheckout}
                   className="w-full sm:w-auto bg-yellow-400 text-gray-800 px-6 sm:px-8 py-4 rounded-lg sm:rounded-full font-bold text-base sm:text-lg shadow-lg hover:bg-yellow-500 transition-colors flex items-center justify-center gap-2"
                 >
-                  Book {cart.length} Item{cart.length > 1 ? 's' : ''} (${getCartTotal().toFixed(2)})
+                  Book {cart.length} Item{cart.length > 1 ? 's' : ''} (${cartTotal.toFixed(2)})
                   <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
               </div>
@@ -423,7 +424,7 @@ export default function CustomerBooking() {
                   Pickup: {new Date(pickupDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
                 <p className="font-bold text-lg text-gray-900">
-                  Total: ${getCartTotal().toFixed(2)} for {cart.length} item{cart.length > 1 ? 's' : ''}
+                  Total: ${cartTotal.toFixed(2)} for {cart.length} item{cart.length > 1 ? 's' : ''}
                 </p>
               </div>
 
@@ -516,6 +517,7 @@ export default function CustomerBooking() {
                     <img
                       src={selectedItem.photos[currentPhotoIndex]?.image_url}
                       alt={`${selectedItem.name} - Photo ${currentPhotoIndex + 1}`}
+                      loading="lazy"
                       className="w-full h-full object-cover"
                     />
                   </div>

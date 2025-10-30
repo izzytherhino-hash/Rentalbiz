@@ -131,6 +131,39 @@ class ProposalType(str, enum.Enum):
     CUSTOMER_COMMUNICATION = "customer_communication"
 
 
+class PartnerStatus(str, enum.Enum):
+    """Partner relationship states."""
+
+    PROSPECTING = "prospecting"
+    PIPELINE = "pipeline"
+    PARTNERED = "partnered"
+    INACTIVE = "inactive"
+
+
+class IntegrationType(str, enum.Enum):
+    """Partner integration methods."""
+
+    MANUAL = "manual"
+    WEB_SCRAPING = "web_scraping"
+    API = "api"
+    CSV_UPLOAD = "csv_upload"
+
+
+class OwnershipType(str, enum.Enum):
+    """Inventory ownership types."""
+
+    OWN_INVENTORY = "own_inventory"
+    PARTNER_INVENTORY = "partner_inventory"
+
+
+class SyncStatus(str, enum.Enum):
+    """Inventory sync operation status."""
+
+    SUCCESS = "success"
+    FAILED = "failed"
+    PARTIAL = "partial"
+
+
 # Database Models
 
 
@@ -211,6 +244,28 @@ class InventoryItem(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=InventoryStatus.AVAILABLE.value, index=True
     )
+
+    # Partner inventory fields
+    ownership_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=OwnershipType.OWN_INVENTORY.value, index=True
+    )
+    partner_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("partners.partner_id"), nullable=True, index=True
+    )
+    warehouse_location_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("warehouse_locations.location_id"), nullable=True, index=True
+    )
+    partner_cost: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )  # What partner charges us
+    customer_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )  # What we charge customer (with markup)
+    partner_product_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    duplicate_group_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
@@ -221,6 +276,12 @@ class InventoryItem(Base):
     )
     current_warehouse: Mapped["Warehouse"] = relationship(
         "Warehouse", foreign_keys=[current_warehouse_id], back_populates="inventory_items_current"
+    )
+    partner: Mapped["Partner"] = relationship(
+        "Partner", foreign_keys=[partner_id], back_populates="inventory_items"
+    )
+    warehouse_location: Mapped["WarehouseLocation"] = relationship(
+        "WarehouseLocation", foreign_keys=[warehouse_location_id], back_populates="inventory_items"
     )
     booking_items: Mapped[List["BookingItem"]] = relationship("BookingItem", back_populates="inventory_item")
     movements: Mapped[List["InventoryMovement"]] = relationship("InventoryMovement", back_populates="inventory_item")
@@ -551,3 +612,163 @@ class PhineasProposal(Base):
     driver: Mapped["Driver"] = relationship("Driver", foreign_keys=[driver_id])
     inventory_item: Mapped["InventoryItem"] = relationship("InventoryItem", foreign_keys=[inventory_item_id])
     customer: Mapped["Customer"] = relationship("Customer", foreign_keys=[customer_id])
+
+
+class Partner(Base):
+    """
+    Partner companies that provide additional rental inventory.
+
+    Partners can have multiple warehouse locations, each serving different service areas.
+    Tracks relationship status, integration method, and financial terms.
+    """
+
+    __tablename__ = "partners"
+
+    partner_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    contact_person: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=PartnerStatus.PROSPECTING.value, index=True
+    )
+    website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Financial terms
+    commission_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 2), nullable=True
+    )  # Percentage partner gets (e.g., 85.00 = 85%)
+    markup_percentage: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 2), nullable=True
+    )  # Our markup on partner cost (e.g., 20.00 = 20%)
+
+    # Integration settings
+    integration_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=IntegrationType.MANUAL.value
+    )
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False
+    )
+
+    # Relationships
+    warehouse_locations: Mapped[List["WarehouseLocation"]] = relationship(
+        "WarehouseLocation", back_populates="partner", cascade="all, delete-orphan"
+    )
+    inventory_items: Mapped[List["InventoryItem"]] = relationship(
+        "InventoryItem", back_populates="partner"
+    )
+    sync_logs: Mapped[List["InventorySyncLog"]] = relationship(
+        "InventorySyncLog", back_populates="partner"
+    )
+
+
+class WarehouseLocation(Base):
+    """
+    Physical warehouse locations for partner companies.
+
+    Each partner can have multiple warehouse locations serving different geographic areas.
+    Supports both radius-based and city-list service area definitions.
+    """
+
+    __tablename__ = "warehouse_locations"
+
+    location_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    partner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("partners.partner_id"), nullable=False, index=True
+    )
+    location_name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Address and coordinates
+    address: Mapped[str] = mapped_column(Text, nullable=False)
+    address_lat: Mapped[Decimal | None] = mapped_column(Numeric(10, 8), nullable=True)
+    address_lng: Mapped[Decimal | None] = mapped_column(Numeric(11, 8), nullable=True)
+
+    # Service area definitions (supports BOTH radius AND city list)
+    service_area_radius_miles: Mapped[Decimal | None] = mapped_column(
+        Numeric(6, 2), nullable=True
+    )  # e.g., 50.00 miles
+    service_area_cities: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # JSON array of city names
+
+    # Contact information
+    contact_person: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Operating details
+    operating_hours: Mapped[str | None] = mapped_column(Text, nullable=True)
+    delivery_options: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # JSON for delivery capabilities
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    # Relationships
+    partner: Mapped["Partner"] = relationship("Partner", back_populates="warehouse_locations")
+    inventory_items: Mapped[List["InventoryItem"]] = relationship(
+        "InventoryItem", back_populates="warehouse_location"
+    )
+    sync_logs: Mapped[List["InventorySyncLog"]] = relationship(
+        "InventorySyncLog", back_populates="warehouse_location"
+    )
+
+
+class InventorySyncLog(Base):
+    """
+    Tracks inventory synchronization operations with partner systems.
+
+    Logs each sync attempt including items added/updated/removed and any errors.
+    Supports filtering by partner, warehouse location, or sync status.
+    """
+
+    __tablename__ = "inventory_sync_logs"
+
+    sync_log_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    partner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("partners.partner_id"), nullable=False, index=True
+    )
+    warehouse_location_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("warehouse_locations.location_id"), nullable=True, index=True
+    )
+
+    sync_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # manual, scheduled, web_scraping, api, csv_upload
+
+    # Sync statistics
+    items_added: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    items_updated: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    items_removed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=SyncStatus.SUCCESS.value, index=True
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    sync_started_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True
+    )
+    sync_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Relationships
+    partner: Mapped["Partner"] = relationship("Partner", back_populates="sync_logs")
+    warehouse_location: Mapped["WarehouseLocation"] = relationship(
+        "WarehouseLocation", back_populates="sync_logs"
+    )

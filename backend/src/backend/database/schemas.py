@@ -20,6 +20,10 @@ from backend.database.models import (
     NotificationType,
     NotificationChannel,
     NotificationStatus,
+    PartnerStatus,
+    IntegrationType,
+    OwnershipType,
+    SyncStatus,
 )
 
 
@@ -551,3 +555,129 @@ class ConflictDetail(BaseSchema):
     item_name: str
     booking1: dict
     booking2: dict
+
+
+# Partner Inventory Schemas
+
+
+class PartnerBase(BaseSchema):
+    """Base partner fields."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    contact_person: Optional[str] = Field(None, max_length=255)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    status: str = Field(default=PartnerStatus.PROSPECTING.value)
+    website_url: Optional[str] = Field(None, max_length=500)
+    commission_rate: Optional[Decimal] = Field(None, ge=0, le=100)
+    markup_percentage: Optional[Decimal] = Field(None, ge=0, le=200)
+    integration_type: str = Field(default=IntegrationType.MANUAL.value)
+    notes: Optional[str] = None
+
+
+class PartnerCreate(PartnerBase):
+    """Schema for creating a new partner."""
+
+    pass
+
+
+class PartnerUpdate(BaseSchema):
+    """Schema for updating a partner (all fields optional)."""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    contact_person: Optional[str] = Field(None, max_length=255)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    status: Optional[str] = None
+    website_url: Optional[str] = Field(None, max_length=500)
+    commission_rate: Optional[Decimal] = Field(None, ge=0, le=100)
+    markup_percentage: Optional[Decimal] = Field(None, ge=0, le=200)
+    integration_type: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class Partner(PartnerBase):
+    """Complete partner response schema."""
+
+    partner_id: str
+    last_sync_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class WarehouseLocationBase(BaseSchema):
+    """Base warehouse location fields."""
+
+    location_name: str = Field(..., min_length=1, max_length=255)
+    address: str
+    address_lat: Optional[Decimal] = Field(None, ge=-90, le=90)
+    address_lng: Optional[Decimal] = Field(None, ge=-180, le=180)
+    service_area_radius_miles: Optional[Decimal] = Field(None, ge=0, le=1000)
+    service_area_cities: Optional[List[str]] = None
+    contact_person: Optional[str] = Field(None, max_length=255)
+    contact_phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    contact_email: Optional[EmailStr] = None
+    operating_hours: Optional[str] = None
+    delivery_options: Optional[List[str]] = None
+    is_active: bool = True
+    notes: Optional[str] = None
+
+
+class WarehouseLocationCreate(WarehouseLocationBase):
+    """Schema for creating a new warehouse location."""
+
+    partner_id: str
+
+
+class WarehouseLocationUpdate(BaseSchema):
+    """Schema for updating a warehouse location (all fields optional)."""
+
+    location_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    address: Optional[str] = None
+    address_lat: Optional[Decimal] = Field(None, ge=-90, le=90)
+    address_lng: Optional[Decimal] = Field(None, ge=-180, le=180)
+    service_area_radius_miles: Optional[Decimal] = Field(None, ge=0, le=1000)
+    service_area_cities: Optional[List[str]] = None
+    contact_person: Optional[str] = Field(None, max_length=255)
+    contact_phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    contact_email: Optional[EmailStr] = None
+    operating_hours: Optional[str] = None
+    delivery_options: Optional[List[str]] = None
+    is_active: Optional[bool] = None
+    notes: Optional[str] = None
+
+
+class WarehouseLocation(WarehouseLocationBase):
+    """Complete warehouse location response schema."""
+
+    location_id: str
+    partner_id: str
+    created_at: datetime
+
+
+class InventorySyncLogBase(BaseSchema):
+    """Base inventory sync log fields."""
+
+    sync_type: str
+    items_added: int = 0
+    items_updated: int = 0
+    items_removed: int = 0
+    status: str = Field(default=SyncStatus.SUCCESS.value)
+    error_message: Optional[str] = None
+
+
+class InventorySyncLogCreate(InventorySyncLogBase):
+    """Schema for creating a new sync log."""
+
+    partner_id: str
+    warehouse_location_id: Optional[str] = None
+
+
+class InventorySyncLog(InventorySyncLogBase):
+    """Complete inventory sync log response schema."""
+
+    sync_log_id: str
+    partner_id: str
+    warehouse_location_id: Optional[str] = None
+    sync_started_at: datetime
+    sync_completed_at: Optional[datetime] = None

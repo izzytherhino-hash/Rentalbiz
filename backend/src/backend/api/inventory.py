@@ -6,15 +6,19 @@ Handles inventory management:
 - Get item details
 - Get item availability calendar
 - Real-time location tracking
+- Location-based partner inventory filtering
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import date
 from pathlib import Path
+from decimal import Decimal
 import uuid
 import shutil
+import math
 
 from backend.database import get_db
 from backend.database.models import (
@@ -23,6 +27,8 @@ from backend.database.models import (
     Booking,
     BookingItem,
     BookingStatus,
+    WarehouseLocation,
+    OwnershipType,
 )
 from backend.database.schemas import (
     InventoryItem as InventoryItemSchema,
@@ -32,8 +38,101 @@ from backend.database.schemas import (
     InventoryPhotoCreate,
     InventoryPhotoUpdate,
 )
+from backend.utils.cache import inventory_cache
 
 router = APIRouter()
+
+
+# ============================================================================
+# LOCATION-BASED FILTERING HELPERS
+# ============================================================================
+
+
+def calculate_distance(
+    lat1: Decimal, lon1: Decimal, lat2: Decimal, lon2: Decimal
+) -> float:
+    """
+    Calculate distance between two coordinates using Haversine formula.
+
+    Args:
+        lat1: Latitude of first point
+        lon1: Longitude of first point
+        lat2: Latitude of second point
+        lon2: Longitude of second point
+
+    Returns:
+        Distance in miles
+    """
+    # Convert to float for math operations
+    lat1, lon1, lat2, lon2 = map(float, [lat1, lon1, lat2, lon2])
+
+    # Convert to radians
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+
+    # Haversine formula
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    )
+    c = 2 * math.asin(math.sqrt(a))
+
+    # Earth radius in miles
+    r = 3959
+
+    return c * r
+
+
+def is_within_service_area(
+    warehouse_location: WarehouseLocation,
+    customer_lat: Optional[Decimal],
+    customer_lng: Optional[Decimal],
+    customer_city: Optional[str],
+) -> bool:
+    """
+    Check if customer location is within partner's service area.
+
+    Checks both radius-based and city-based service areas.
+
+    Args:
+        warehouse_location: Partner warehouse location with service area info
+        customer_lat: Customer latitude
+        customer_lng: Customer longitude
+        customer_city: Customer city name
+
+    Returns:
+        True if customer is within service area
+    """
+    # Check city-based service area first (fastest)
+    if customer_city and warehouse_location.service_area_cities:
+        # service_area_cities is stored as JSON array
+        if customer_city.lower() in [
+            city.lower() for city in warehouse_location.service_area_cities
+        ]:
+            return True
+
+    # Check radius-based service area
+    if (
+        customer_lat
+        and customer_lng
+        and warehouse_location.address_lat
+        and warehouse_location.address_lng
+        and warehouse_location.service_area_radius_miles
+    ):
+        distance = calculate_distance(
+            warehouse_location.address_lat,
+            warehouse_location.address_lng,
+            customer_lat,
+            customer_lng,
+        )
+        return distance <= float(warehouse_location.service_area_radius_miles)
+
+    # If no location data provided, include the item
+    return True
 
 
 @router.post("/", response_model=InventoryItemSchema, status_code=status.HTTP_201_CREATED)
@@ -80,29 +179,58 @@ async def create_inventory_item(
     return item
 
 
-@router.get("/", response_model=List[InventoryItemSchema])
+@router.get("/")
 async def list_inventory(
+    skip: int = Query(0, ge=0, description="Number of items to skip (pagination)"),
+    limit: int = Query(50, ge=1, le=200, description="Maximum number of items to return"),
     category: str = None,
     status: str = None,
     warehouse_id: str = None,
+    customer_lat: Optional[Decimal] = Query(None, description="Customer latitude for location-based filtering"),
+    customer_lng: Optional[Decimal] = Query(None, description="Customer longitude for location-based filtering"),
+    customer_city: Optional[str] = Query(None, description="Customer city for location-based filtering"),
+    include_partner_inventory: bool = Query(True, description="Include partner inventory items"),
     db: Session = Depends(get_db),
 ):
     """
-    List all inventory items with optional filters.
+    List inventory items with pagination and optional filters.
+
+    Supports location-based filtering for partner inventory items.
+    Partner items are filtered based on service area (radius or city list).
+
+    Uses in-memory caching to reduce database load. Cache TTL is 5 minutes.
 
     Args:
+        skip: Number of items to skip for pagination (default: 0)
+        limit: Maximum number of items to return (default: 50, max: 200)
         category: Filter by category (Inflatable, Concession, etc.)
         status: Filter by status (available, rented, maintenance)
         warehouse_id: Filter by current warehouse location
+        customer_lat: Customer latitude for service area filtering
+        customer_lng: Customer longitude for service area filtering
+        customer_city: Customer city name for service area filtering
+        include_partner_inventory: Whether to include partner inventory (default: True)
         db: Database session
 
     Returns:
-        List of inventory items with real-time location
+        Paginated response with items and metadata
 
-    Example:
-        GET /api/inventory?category=Inflatable&status=available
+    Examples:
+        GET /api/inventory?skip=0&limit=20&category=Inflatable
+        GET /api/inventory?skip=20&limit=20&status=available
+        GET /api/inventory?customer_lat=34.0522&customer_lng=-118.2437&limit=100
     """
     from sqlalchemy.orm import joinedload
+
+    # Create cache key based on query parameters
+    # Note: We exclude location params from cache as they vary widely
+    cache_key = f"inventory:{skip}:{limit}:{category}:{status}:{warehouse_id}:{include_partner_inventory}"
+
+    # Try to get from cache (only if no location filtering)
+    if not (customer_lat or customer_lng or customer_city):
+        cached_response = inventory_cache.get(cache_key)
+        if cached_response is not None:
+            return cached_response
 
     query = db.query(InventoryItem).options(joinedload(InventoryItem.photos))
 
@@ -115,8 +243,75 @@ async def list_inventory(
     if warehouse_id:
         query = query.filter(InventoryItem.current_warehouse_id == warehouse_id)
 
-    items = query.all()
-    return items
+    # Get total count before pagination
+    total_count = query.count()
+
+    # Apply pagination
+    items = query.offset(skip).limit(limit).all()
+
+    # Apply location-based filtering for partner inventory
+    if include_partner_inventory and (customer_lat or customer_lng or customer_city):
+        filtered_items = []
+
+        for item in items:
+            # Always include own inventory
+            if item.ownership_type != OwnershipType.PARTNER_INVENTORY.value:
+                filtered_items.append(item)
+                continue
+
+            # For partner inventory, check service area
+            if item.warehouse_location_id:
+                warehouse_location = (
+                    db.query(WarehouseLocation)
+                    .filter(WarehouseLocation.location_id == item.warehouse_location_id)
+                    .first()
+                )
+
+                if warehouse_location and is_within_service_area(
+                    warehouse_location, customer_lat, customer_lng, customer_city
+                ):
+                    filtered_items.append(item)
+            else:
+                # Include partner items without location specified
+                filtered_items.append(item)
+
+        response = {
+            "items": jsonable_encoder(filtered_items),
+            "total": total_count,
+            "skip": skip,
+            "limit": limit,
+            "has_more": (skip + limit) < total_count
+        }
+        # Don't cache location-based queries
+        return response
+    elif not include_partner_inventory:
+        # Filter out all partner inventory
+        filtered_items = [
+            item
+            for item in items
+            if item.ownership_type != OwnershipType.PARTNER_INVENTORY.value
+        ]
+        response = {
+            "items": jsonable_encoder(filtered_items),
+            "total": total_count,
+            "skip": skip,
+            "limit": limit,
+            "has_more": (skip + limit) < total_count
+        }
+        # Cache the response
+        inventory_cache.set(cache_key, response)
+        return response
+
+    response = {
+        "items": jsonable_encoder(items),
+        "total": total_count,
+        "skip": skip,
+        "limit": limit,
+        "has_more": (skip + limit) < total_count
+    }
+    # Cache the response
+    inventory_cache.set(cache_key, response)
+    return response
 
 
 @router.get("/{item_id}", response_model=InventoryItemSchema)
@@ -137,9 +332,14 @@ async def get_inventory_item(
     Raises:
         HTTPException: If item not found
     """
-    item = db.query(InventoryItem).filter(
-        InventoryItem.inventory_item_id == item_id
-    ).first()
+    from sqlalchemy.orm import joinedload
+
+    item = (
+        db.query(InventoryItem)
+        .options(joinedload(InventoryItem.photos))
+        .filter(InventoryItem.inventory_item_id == item_id)
+        .first()
+    )
 
     if not item:
         raise HTTPException(

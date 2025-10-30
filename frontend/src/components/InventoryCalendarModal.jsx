@@ -245,9 +245,9 @@ export default function InventoryCalendarModal({ item, onClose }) {
                     <div className="text-sm font-medium text-gray-600">Status</div>
                     <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
                       item.status === 'available'
-                        ? 'bg-green-100 text-green-800'
-                        : item.status === 'rented'
                         ? 'bg-yellow-100 text-yellow-800'
+                        : item.status === 'rented'
+                        ? 'bg-blue-100 text-blue-800'
                         : 'bg-red-100 text-red-800'
                     }`}>
                       {item.status?.toUpperCase()}
@@ -259,7 +259,7 @@ export default function InventoryCalendarModal({ item, onClose }) {
               {/* Right Column - Pricing and Features */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-2xl font-semibold text-gray-800">
-                  <DollarSign className="w-6 h-6 text-green-600" />
+                  <DollarSign className="w-6 h-6 text-yellow-400" />
                   ${parseFloat(item.base_price).toFixed(2)} / day
                 </div>
 
@@ -296,7 +296,7 @@ export default function InventoryCalendarModal({ item, onClose }) {
                   <div className="text-sm font-medium text-gray-600">Website Visibility</div>
                   <div className="text-gray-800">
                     {item.website_visible ? (
-                      <span className="text-green-600">Visible to customers</span>
+                      <span className="text-yellow-400 font-medium">Visible to customers</span>
                     ) : (
                       <span className="text-gray-500">Hidden from website</span>
                     )}

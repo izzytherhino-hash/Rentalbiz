@@ -7,3 +7,34 @@
     @apply m-0 font-sans antialiased;
   }
 }
+
+/* Mobile Optimizations */
+@layer utilities {
+  /* Ensure minimum 44x44px touch targets */
+  button,
+  a,
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Improve touch feedback */
+  button:active,
+  a:active {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+
+  /* Prevent double-tap zoom */
+  button,
+  a {
+    touch-action: manipulation;
+  }
+
+  /* Smooth scrolling for mobile */
+  @media (max-width: 768px) {
+    * {
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+}
