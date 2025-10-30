@@ -111,7 +111,14 @@ from backend.api.phineas import router as phineas_router
 from backend.api.routes import router as routes_router
 from backend.api.warehouses import router as warehouses_router
 from backend.api.partners import router as partners_router
-from backend.api.inventory_sync import router as inventory_sync_router
+
+# Try to import inventory_sync router (requires scraping dependencies)
+try:
+    from backend.api.inventory_sync import router as inventory_sync_router
+    inventory_sync_available = True
+except ImportError as e:
+    print(f"Warning: Inventory sync module not available: {e}")
+    inventory_sync_available = False
 
 app.include_router(bookings_router, prefix="/api/bookings", tags=["Bookings"])
 app.include_router(drivers_router, prefix="/api/drivers", tags=["Drivers"])
@@ -120,7 +127,8 @@ app.include_router(inventory_router, prefix="/api/inventory", tags=["Inventory"]
 app.include_router(customers_router, prefix="/api/customers", tags=["Customers"])
 app.include_router(warehouses_router, prefix="/api/warehouses", tags=["Warehouses"])
 app.include_router(partners_router, prefix="/api/partners", tags=["Partners"])
-app.include_router(inventory_sync_router, prefix="/api/inventory", tags=["Inventory Sync"])
+if inventory_sync_available:
+    app.include_router(inventory_sync_router, prefix="/api/inventory", tags=["Inventory Sync"])
 app.include_router(chatbot_router, prefix="/api/admin/chatbot", tags=["Chatbot"])
 app.include_router(phineas_router, prefix="/api/admin/phineas", tags=["Phineas"])
 app.include_router(routes_router, prefix="/api/routes", tags=["Routes"])
