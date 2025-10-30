@@ -27,8 +27,29 @@ async def lifespan(app: FastAPI):
 
     Handles startup and shutdown events.
     """
-    # Startup: Create database tables
-    Base.metadata.create_all(bind=engine)
+    # Startup: Run database migrations
+    try:
+        from alembic.config import Config
+        from alembic import command
+        import os
+
+        # Get the alembic.ini path
+        backend_dir = Path(__file__).parent.parent.parent
+        alembic_ini = backend_dir / "alembic.ini"
+
+        if alembic_ini.exists():
+            print("Running database migrations...")
+            cfg = Config(str(alembic_ini))
+            command.upgrade(cfg, "head")
+            print("✅ Migrations completed successfully")
+        else:
+            print("⚠️ alembic.ini not found, using Base.metadata.create_all")
+            Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"⚠️ Migration warning: {e}")
+        print("Falling back to Base.metadata.create_all")
+        Base.metadata.create_all(bind=engine)
+
     print("Database tables created/verified")
     print(f"API running on http://{settings.api_host}:{settings.api_port}")
     print(f"API docs available at http://{settings.api_host}:{settings.api_port}/docs")
