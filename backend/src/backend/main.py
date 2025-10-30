@@ -52,7 +52,13 @@ app = FastAPI(
 # Configure CORS for React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        settings.frontend_url,
+        "https://partay.onrender.com",
+        "https://partay-app-frontend.onrender.com",
+        "http://localhost:5173",
+        "http://localhost:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
