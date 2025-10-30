@@ -2,6 +2,27 @@
 
 This file provides comprehensive guidance to Claude Code when working with Python code in this repository.
 
+## 🔒 Security Guidelines (CRITICAL - READ FIRST)
+
+**NEVER ask the user to:**
+- Share API keys, tokens, or credentials in chat
+- Paste database URLs or connection strings in chat
+- Share passwords or secrets in any form
+- Expose any sensitive configuration values
+
+**ALWAYS:**
+- Use environment variables for all secrets (`.env` files)
+- Create scripts that read from environment variables
+- Guide users to set secrets in Render dashboard (Environment tab)
+- Use secure file access methods that don't expose credentials
+- Assume credentials are already configured in deployment environments
+
+**When migrations or admin tasks are needed:**
+- Use Render's Shell or Dashboard features (user does it directly)
+- Create API endpoints that run without exposing credentials
+- Use Alembic migrations that run automatically on deploy
+- Never ask for direct database access from the user
+
 ## Core Development Philosophy
 
 ### KISS (Keep It Simple, Stupid)
