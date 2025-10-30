@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Partay Rental Management API",
     description="API for managing party equipment rentals, drivers, and inventory",
-    version="1.0.0",
+    version="1.0.1",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -70,7 +70,7 @@ async def root():
     """
     return {
         "message": "Partay Rental Management API",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "status": "operational",
         "docs": "/docs",
         "endpoints": {
@@ -96,7 +96,7 @@ async def health_check():
     return {
         "status": "healthy",
         "database": "connected",
-        "version": "1.0.0",
+        "version": "1.0.1",
     }
 
 
