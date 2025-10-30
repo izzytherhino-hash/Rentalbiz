@@ -1162,3 +1162,34 @@ async def update_scraped_categories(db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating categories: {str(e)}"
         )
+
+
+@router.post("/run-migrations", tags=["Admin"])
+async def run_migrations():
+    """
+    Run database migrations.
+    
+    WARNING: This is a temporary endpoint for emergency use only.
+    Should be removed after migrations are run.
+    """
+    try:
+        from alembic.config import Config
+        from alembic import command
+        import os
+        
+        # Get the backend directory path
+        backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        alembic_cfg_path = os.path.join(backend_dir, "..", "alembic.ini")
+        
+        cfg = Config(alembic_cfg_path)
+        command.upgrade(cfg, "head")
+        
+        return {
+            "status": "success",
+            "message": "Migrations completed successfully"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
