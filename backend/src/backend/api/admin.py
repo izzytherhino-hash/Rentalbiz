@@ -1368,10 +1368,15 @@ async def fix_partner_id_type(db: Session = Depends(get_db)):
         db.execute(text(sql1))
         db.commit()
         
-        # Step 2: Convert partner_id column from VARCHAR to UUID
+        # Step 2: Convert partner_id and location_id columns from VARCHAR to UUID
         sql2 = """
-        ALTER TABLE partners 
+        -- Convert partners.partner_id to UUID
+        ALTER TABLE partners
         ALTER COLUMN partner_id TYPE UUID USING partner_id::UUID;
+
+        -- Convert warehouse_locations.location_id to UUID
+        ALTER TABLE warehouse_locations
+        ALTER COLUMN location_id TYPE UUID USING location_id::UUID;
         """
         db.execute(text(sql2))
         db.commit()
