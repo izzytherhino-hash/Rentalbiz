@@ -1356,17 +1356,30 @@ async def fix_partner_id_type(db: Session = Depends(get_db)):
     try:
         from sqlalchemy import text
         
-        # Step 1: Drop the foreign key constraints from inventory_items if they exist
+        # Step 1: Drop ALL foreign key constraints that reference partners.partner_id
         sql1 = """
         DO $$
         BEGIN
+            -- Drop constraints from inventory_items
             IF EXISTS (SELECT 1 FROM information_schema.table_constraints
                       WHERE constraint_name='fk_inventory_partner') THEN
                 ALTER TABLE inventory_items DROP CONSTRAINT fk_inventory_partner;
             END IF;
-           IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
                       WHERE constraint_name='fk_inventory_warehouse_location') THEN
                 ALTER TABLE inventory_items DROP CONSTRAINT fk_inventory_warehouse_location;
+            END IF;
+
+            -- Drop constraint from warehouse_locations
+            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+                      WHERE constraint_name='warehouse_locations_partner_id_fkey') THEN
+                ALTER TABLE warehouse_locations DROP CONSTRAINT warehouse_locations_partner_id_fkey;
+            END IF;
+
+            -- Drop constraint from inventory_sync_logs
+            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+                      WHERE constraint_name='inventory_sync_logs_partner_id_fkey') THEN
+                ALTER TABLE inventory_sync_logs DROP CONSTRAINT inventory_sync_logs_partner_id_fkey;
             END IF;
         END $$;
         """
@@ -1381,15 +1394,26 @@ async def fix_partner_id_type(db: Session = Depends(get_db)):
         db.execute(text(sql2))
         db.commit()
         
-        # Step 3: Re-add the foreign key constraints
+        # Step 3: Re-add ALL foreign key constraints
         sql3 = """
+        -- Add constraint to inventory_items
         ALTER TABLE inventory_items
         ADD CONSTRAINT fk_inventory_partner
         FOREIGN KEY (partner_id) REFERENCES partners(partner_id) ON DELETE SET NULL;
-        
+
         ALTER TABLE inventory_items
         ADD CONSTRAINT fk_inventory_warehouse_location
         FOREIGN KEY (warehouse_location_id) REFERENCES warehouse_locations(location_id) ON DELETE SET NULL;
+
+        -- Add constraint to warehouse_locations
+        ALTER TABLE warehouse_locations
+        ADD CONSTRAINT warehouse_locations_partner_id_fkey
+        FOREIGN KEY (partner_id) REFERENCES partners(partner_id) ON DELETE CASCADE;
+
+        -- Add constraint to inventory_sync_logs
+        ALTER TABLE inventory_sync_logs
+        ADD CONSTRAINT inventory_sync_logs_partner_id_fkey
+        FOREIGN KEY (partner_id) REFERENCES partners(partner_id) ON DELETE CASCADE;
         """
         db.execute(text(sql3))
         db.commit()
