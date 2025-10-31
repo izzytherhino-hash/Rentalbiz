@@ -1193,3 +1193,40 @@ async def run_migrations():
             "status": "error",
             "message": str(e)
         }
+
+
+@router.post("/run-migrations")
+async def run_migrations_endpoint():
+    """
+    Manually trigger database migrations.
+    
+    This is a one-time endpoint to run pending migrations.
+    """
+    try:
+        from alembic.config import Config
+        from alembic import command
+        from pathlib import Path
+        
+        # Get the alembic.ini path
+        backend_dir = Path(__file__).parent.parent.parent.parent
+        alembic_ini = backend_dir / "alembic.ini"
+        
+        if not alembic_ini.exists():
+            raise HTTPException(
+                status_code=500,
+                detail=f"alembic.ini not found at {alembic_ini}"
+            )
+        
+        # Run migrations
+        cfg = Config(str(alembic_ini))
+        command.upgrade(cfg, "head")
+        
+        return {
+            "status": "success",
+            "message": "Migrations completed successfully"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Migration failed: {str(e)}"
+        )
