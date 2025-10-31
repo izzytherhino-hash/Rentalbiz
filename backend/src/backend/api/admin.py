@@ -1344,3 +1344,63 @@ async def apply_schema_fix(db: Session = Depends(get_db)):
             status_code=500,
             detail=f"Schema fix failed: {str(e)}"
         )
+
+
+@router.post("/fix-partner-id-type")
+async def fix_partner_id_type(db: Session = Depends(get_db)):
+    """
+    Fix the partner_id column type mismatch.
+    
+    Converts partners.partner_id from VARCHAR to UUID and re-adds foreign keys.
+    """
+    try:
+        from sqlalchemy import text
+        
+        # Step 1: Drop the foreign key constraints from inventory_items if they exist
+        sql1 = """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+                      WHERE constraint_name='fk_inventory_partner') THEN
+                ALTER TABLE inventory_items DROP CONSTRAINT fk_inventory_partner;
+            END IF;
+           IF EXISTS (SELECT 1 FROM information_schema.table_constraints
+                      WHERE constraint_name='fk_inventory_warehouse_location') THEN
+                ALTER TABLE inventory_items DROP CONSTRAINT fk_inventory_warehouse_location;
+            END IF;
+        END $$;
+        """
+        db.execute(text(sql1))
+        db.commit()
+        
+        # Step 2: Convert partner_id column from VARCHAR to UUID
+        sql2 = """
+        ALTER TABLE partners 
+        ALTER COLUMN partner_id TYPE UUID USING partner_id::UUID;
+        """
+        db.execute(text(sql2))
+        db.commit()
+        
+        # Step 3: Re-add the foreign key constraints
+        sql3 = """
+        ALTER TABLE inventory_items
+        ADD CONSTRAINT fk_inventory_partner
+        FOREIGN KEY (partner_id) REFERENCES partners(partner_id) ON DELETE SET NULL;
+        
+        ALTER TABLE inventory_items
+        ADD CONSTRAINT fk_inventory_warehouse_location
+        FOREIGN KEY (warehouse_location_id) REFERENCES warehouse_locations(location_id) ON DELETE SET NULL;
+        """
+        db.execute(text(sql3))
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": "Partner ID type fixed successfully. Foreign keys added."
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fix partner ID type: {str(e)}"
+        )
