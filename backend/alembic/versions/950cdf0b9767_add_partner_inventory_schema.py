@@ -22,96 +22,153 @@ def upgrade() -> None:
     """
     Add partner inventory management schema.
 
-    - Creates partners table
+    - Creates partners table (if not exists)
     - Creates warehouse_locations table
     - Creates inventory_sync_logs table
     - Adds partner-related columns to inventory_items
     """
-    # Create partners table
-    op.create_table(
-        'partners',
-        sa.Column('partner_id', sa.UUID(), nullable=False, server_default=sa.text('gen_random_uuid()')),
-        sa.Column('name', sa.String(255), nullable=False),
-        sa.Column('contact_person', sa.String(255), nullable=True),
-        sa.Column('email', sa.String(255), nullable=True),
-        sa.Column('phone', sa.String(50), nullable=True),
-        sa.Column('status', sa.String(50), nullable=True, server_default='prospecting'),
-        sa.Column('website_url', sa.String(500), nullable=True),
-        sa.Column('commission_rate', sa.Numeric(5, 2), nullable=True),
-        sa.Column('markup_percentage', sa.Numeric(5, 2), nullable=True),
-        sa.Column('integration_type', sa.String(50), nullable=True, server_default='manual'),
-        sa.Column('last_sync_at', sa.TIMESTAMP(), nullable=True),
-        sa.Column('notes', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.TIMESTAMP(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
-        sa.Column('updated_at', sa.TIMESTAMP(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
-        sa.PrimaryKeyConstraint('partner_id')
-    )
+    # Use raw SQL to safely create partners table
+    connection = op.get_bind()
 
-    # Create warehouse_locations table
-    op.create_table(
-        'warehouse_locations',
-        sa.Column('location_id', sa.UUID(), nullable=False, server_default=sa.text('gen_random_uuid()')),
-        sa.Column('partner_id', sa.UUID(), nullable=True),
-        sa.Column('location_name', sa.String(255), nullable=False),
-        sa.Column('address', sa.String(500), nullable=False),
-        sa.Column('address_lat', sa.Numeric(10, 7), nullable=False),
-        sa.Column('address_lng', sa.Numeric(10, 7), nullable=False),
-        sa.Column('service_area_radius_miles', sa.Numeric(6, 2), nullable=True),
-        sa.Column('service_area_cities', sa.JSON(), nullable=True),
-        sa.Column('contact_person', sa.String(255), nullable=True),
-        sa.Column('contact_phone', sa.String(50), nullable=True),
-        sa.Column('contact_email', sa.String(255), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=True, server_default='true'),
-        sa.Column('notes', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.TIMESTAMP(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
-        sa.Column('updated_at', sa.TIMESTAMP(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
-        sa.PrimaryKeyConstraint('location_id'),
-        sa.ForeignKeyConstraint(['partner_id'], ['partners.partner_id'], ondelete='CASCADE')
-    )
+    # Create partners table only if it doesn't exist
+    connection.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS partners (
+            partner_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name VARCHAR(255) NOT NULL,
+            contact_person VARCHAR(255),
+            email VARCHAR(255),
+            phone VARCHAR(50),
+            status VARCHAR(50) DEFAULT 'prospecting',
+            website_url VARCHAR(500),
+            commission_rate NUMERIC(5,2),
+            markup_percentage NUMERIC(5,2),
+            integration_type VARCHAR(50) DEFAULT 'manual',
+            last_sync_at TIMESTAMP,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
 
-    # Create inventory_sync_logs table
-    op.create_table(
-        'inventory_sync_logs',
-        sa.Column('sync_log_id', sa.UUID(), nullable=False, server_default=sa.text('gen_random_uuid()')),
-        sa.Column('partner_id', sa.UUID(), nullable=True),
-        sa.Column('warehouse_location_id', sa.UUID(), nullable=True),
-        sa.Column('sync_type', sa.String(50), nullable=True),
-        sa.Column('items_added', sa.Integer(), nullable=True, server_default='0'),
-        sa.Column('items_updated', sa.Integer(), nullable=True, server_default='0'),
-        sa.Column('items_removed', sa.Integer(), nullable=True, server_default='0'),
-        sa.Column('status', sa.String(50), nullable=True, server_default='pending'),
-        sa.Column('error_message', sa.Text(), nullable=True),
-        sa.Column('sync_started_at', sa.TIMESTAMP(), nullable=True),
-        sa.Column('sync_completed_at', sa.TIMESTAMP(), nullable=True),
-        sa.PrimaryKeyConstraint('sync_log_id'),
-        sa.ForeignKeyConstraint(['partner_id'], ['partners.partner_id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['warehouse_location_id'], ['warehouse_locations.location_id'], ondelete='SET NULL')
-    )
+    # Create warehouse_locations table only if it doesn't exist
+    connection.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS warehouse_locations (
+            location_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            partner_id UUID REFERENCES partners(partner_id) ON DELETE CASCADE,
+            location_name VARCHAR(255) NOT NULL,
+            address VARCHAR(500) NOT NULL,
+            address_lat NUMERIC(10,7) NOT NULL,
+            address_lng NUMERIC(10,7) NOT NULL,
+            service_area_radius_miles NUMERIC(6,2),
+            service_area_cities JSONB,
+            contact_person VARCHAR(255),
+            contact_phone VARCHAR(50),
+            contact_email VARCHAR(255),
+            is_active BOOLEAN DEFAULT TRUE,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
 
-    # Add columns to inventory_items table
-    op.add_column('inventory_items', sa.Column('ownership_type', sa.String(50), nullable=True, server_default='own_inventory'))
-    op.add_column('inventory_items', sa.Column('partner_id', sa.UUID(), nullable=True))
-    op.add_column('inventory_items', sa.Column('warehouse_location_id', sa.UUID(), nullable=True))
-    op.add_column('inventory_items', sa.Column('partner_cost', sa.Numeric(10, 2), nullable=True))
-    op.add_column('inventory_items', sa.Column('customer_price', sa.Numeric(10, 2), nullable=True))
-    op.add_column('inventory_items', sa.Column('partner_product_url', sa.String(500), nullable=True))
-    op.add_column('inventory_items', sa.Column('is_duplicate', sa.Boolean(), nullable=True, server_default='false'))
-    op.add_column('inventory_items', sa.Column('duplicate_group_id', sa.UUID(), nullable=True))
-    op.add_column('inventory_items', sa.Column('last_synced_at', sa.TIMESTAMP(), nullable=True))
+    # Create inventory_sync_logs table only if it doesn't exist
+    connection.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS inventory_sync_logs (
+            sync_log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            partner_id UUID REFERENCES partners(partner_id) ON DELETE CASCADE,
+            warehouse_location_id UUID REFERENCES warehouse_locations(location_id) ON DELETE SET NULL,
+            sync_type VARCHAR(50),
+            items_added INTEGER DEFAULT 0,
+            items_updated INTEGER DEFAULT 0,
+            items_removed INTEGER DEFAULT 0,
+            status VARCHAR(50) DEFAULT 'pending',
+            error_message TEXT,
+            sync_started_at TIMESTAMP,
+            sync_completed_at TIMESTAMP
+        )
+    """))
 
-    # Add foreign key constraints to inventory_items
-    op.create_foreign_key(
-        'fk_inventory_partner',
-        'inventory_items', 'partners',
-        ['partner_id'], ['partner_id'],
-        ondelete='SET NULL'
-    )
-    op.create_foreign_key(
-        'fk_inventory_warehouse_location',
-        'inventory_items', 'warehouse_locations',
-        ['warehouse_location_id'], ['location_id'],
-        ondelete='SET NULL'
-    )
+    # Add columns to inventory_items table (with IF NOT EXISTS checks)
+    connection.execute(sa.text("""
+        DO $$
+        BEGIN
+            -- Add ownership_type column
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='inventory_items' AND column_name='ownership_type') THEN
+                ALTER TABLE inventory_items ADD COLUMN ownership_type VARCHAR(50) DEFAULT 'own_inventory';
+            END IF;
+
+            -- Add partner_id column
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='inventory_items' AND column_name='partner_id') THEN
+                ALTER TABLE inventory_items ADD COLUMN partner_id UUID;
+            END IF;
+
+            -- Add warehouse_location_id column
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='inventory_items' AND column_name='warehouse_location_id') THEN
+                ALTER TABLE inventory_items ADD COLUMN warehouse_location_id UUID;
+            END IF;
+
+            -- Add partner_cost column
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='inventory_items' AND column_name='partner_cost') THEN
+                ALTER TABLE inventory_items ADD COLUMN partner_cost NUMERIC(10,2);
+            END IF;
+
+            -- Add customer_price column
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='inventory_items' AND column_name='customer_price') THEN
+                ALTER TABLE inventory_items ADD COLUMN customer_price NUMERIC(10,2);
+            END IF;
+
+            -- Add partner_product_url column
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='inventory_items' AND column_name='partner_product_url') THEN
+                ALTER TABLE inventory_items ADD COLUMN partner_product_url VARCHAR(500);
+            END IF;
+
+            -- Add is_duplicate column
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='inventory_items' AND column_name='is_duplicate') THEN
+                ALTER TABLE inventory_items ADD COLUMN is_duplicate BOOLEAN DEFAULT FALSE;
+            END IF;
+
+            -- Add duplicate_group_id column
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='inventory_items' AND column_name='duplicate_group_id') THEN
+                ALTER TABLE inventory_items ADD COLUMN duplicate_group_id UUID;
+            END IF;
+
+            -- Add last_synced_at column
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_name='inventory_items' AND column_name='last_synced_at') THEN
+                ALTER TABLE inventory_items ADD COLUMN last_synced_at TIMESTAMP;
+            END IF;
+        END $$;
+    """))
+
+    # Add foreign key constraints to inventory_items (if they don't exist)
+    connection.execute(sa.text("""
+        DO $$
+        BEGIN
+            -- Add foreign key to partners
+            IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints
+                          WHERE constraint_name='fk_inventory_partner') THEN
+                ALTER TABLE inventory_items
+                ADD CONSTRAINT fk_inventory_partner
+                FOREIGN KEY (partner_id) REFERENCES partners(partner_id) ON DELETE SET NULL;
+            END IF;
+
+            -- Add foreign key to warehouse_locations
+            IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints
+                          WHERE constraint_name='fk_inventory_warehouse_location') THEN
+                ALTER TABLE inventory_items
+                ADD CONSTRAINT fk_inventory_warehouse_location
+                FOREIGN KEY (warehouse_location_id) REFERENCES warehouse_locations(location_id) ON DELETE SET NULL;
+            END IF;
+        END $$;
+    """))
 
 
 def downgrade() -> None:
