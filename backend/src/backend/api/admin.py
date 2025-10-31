@@ -1415,3 +1415,82 @@ async def fix_partner_id_type(db: Session = Depends(get_db)):
             status_code=500,
             detail=f"Failed to fix partner ID type: {str(e)}"
         )
+
+
+@router.post("/recreate-partner-tables")
+async def recreate_partner_tables(db: Session = Depends(get_db)):
+    """
+    Drop and recreate warehouse_locations and inventory_sync_logs with proper UUID types.
+    """
+    try:
+        from sqlalchemy import text
+        
+        sql = """
+        -- Drop existing tables with CASCADE to remove dependencies
+        DROP TABLE IF EXISTS inventory_sync_logs CASCADE;
+        DROP TABLE IF EXISTS warehouse_locations CASCADE;
+
+        -- Recreate warehouse_locations with UUID types
+        CREATE TABLE warehouse_locations (
+            location_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            partner_id UUID REFERENCES partners(partner_id) ON DELETE CASCADE,
+            location_name VARCHAR(255) NOT NULL,
+            address VARCHAR(500) NOT NULL,
+            address_lat NUMERIC(10,7) NOT NULL,
+            address_lng NUMERIC(10,7) NOT NULL,
+            service_area_radius_miles NUMERIC(6,2),
+            service_area_cities JSONB,
+            contact_person VARCHAR(255),
+            contact_phone VARCHAR(50),
+            contact_email VARCHAR(255),
+            is_active BOOLEAN DEFAULT TRUE,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Recreate inventory_sync_logs with UUID types
+        CREATE TABLE inventory_sync_logs (
+            sync_log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            partner_id UUID REFERENCES partners(partner_id) ON DELETE CASCADE,
+            warehouse_location_id UUID REFERENCES warehouse_locations(location_id) ON DELETE SET NULL,
+            sync_type VARCHAR(50),
+            items_added INTEGER DEFAULT 0,
+            items_updated INTEGER DEFAULT 0,
+            items_removed INTEGER DEFAULT 0,
+            status VARCHAR(50) DEFAULT 'pending',
+            error_message TEXT,
+            sync_started_at TIMESTAMP,
+            sync_completed_at TIMESTAMP
+        );
+
+        -- Now add the foreign key from inventory_items to warehouse_locations
+        ALTER TABLE inventory_items
+        ADD CONSTRAINT fk_inventory_warehouse_location
+        FOREIGN KEY (warehouse_location_id) REFERENCES warehouse_locations(location_id) ON DELETE SET NULL;
+
+        -- And add foreign key to partners if not exists
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints
+                          WHERE constraint_name='fk_inventory_partner') THEN
+                ALTER TABLE inventory_items
+                ADD CONSTRAINT fk_inventory_partner
+                FOREIGN KEY (partner_id) REFERENCES partners(partner_id) ON DELETE SET NULL;
+            END IF;
+        END $$;
+        """
+        
+        db.execute(text(sql))
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": "Partner tables recreated with proper UUID types. Ready to sync!"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to recreate tables: {str(e)}"
+        )
