@@ -1357,31 +1357,13 @@ async def fix_partner_id_type(db: Session = Depends(get_db)):
         from sqlalchemy import text
         
         # Step 1: Drop ALL foreign key constraints that reference partners.partner_id
+        # Use CASCADE to drop everything that depends on the column
         sql1 = """
-        DO $$
-        BEGIN
-            -- Drop constraints from inventory_items
-            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
-                      WHERE constraint_name='fk_inventory_partner') THEN
-                ALTER TABLE inventory_items DROP CONSTRAINT fk_inventory_partner;
-            END IF;
-            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
-                      WHERE constraint_name='fk_inventory_warehouse_location') THEN
-                ALTER TABLE inventory_items DROP CONSTRAINT fk_inventory_warehouse_location;
-            END IF;
-
-            -- Drop constraint from warehouse_locations
-            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
-                      WHERE constraint_name='warehouse_locations_partner_id_fkey') THEN
-                ALTER TABLE warehouse_locations DROP CONSTRAINT warehouse_locations_partner_id_fkey;
-            END IF;
-
-            -- Drop constraint from inventory_sync_logs
-            IF EXISTS (SELECT 1 FROM information_schema.table_constraints
-                      WHERE constraint_name='inventory_sync_logs_partner_id_fkey') THEN
-                ALTER TABLE inventory_sync_logs DROP CONSTRAINT inventory_sync_logs_partner_id_fkey;
-            END IF;
-        END $$;
+        -- Drop constraints more aggressively
+        ALTER TABLE inventory_items DROP CONSTRAINT IF EXISTS fk_inventory_partner CASCADE;
+        ALTER TABLE inventory_items DROP CONSTRAINT IF EXISTS fk_inventory_warehouse_location CASCADE;
+        ALTER TABLE warehouse_locations DROP CONSTRAINT IF EXISTS warehouse_locations_partner_id_fkey CASCADE;
+        ALTER TABLE inventory_sync_logs DROP CONSTRAINT IF EXISTS inventory_sync_logs_partner_id_fkey CASCADE;
         """
         db.execute(text(sql1))
         db.commit()
