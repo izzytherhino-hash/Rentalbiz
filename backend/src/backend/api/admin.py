@@ -1230,3 +1230,117 @@ async def run_migrations_endpoint():
             status_code=500,
             detail=f"Migration failed: {str(e)}"
         )
+
+
+@router.post("/apply-schema-fix")
+async def apply_schema_fix(db: Session = Depends(get_db)):
+    """
+    Apply partner inventory schema changes directly via SQL.
+    
+    This bypasses Alembic and applies the schema changes directly to fix production.
+    """
+    try:
+        from sqlalchemy import text
+        
+        sql = """
+        -- Add new columns to inventory_items table
+        ALTER TABLE inventory_items 
+          ADD COLUMN IF NOT EXISTS ownership_type VARCHAR(50) DEFAULT 'own_inventory',
+          ADD COLUMN IF NOT EXISTS partner_id UUID,
+          ADD COLUMN IF NOT EXISTS warehouse_location_id UUID,
+          ADD COLUMN IF NOT EXISTS partner_cost NUMERIC(10,2),
+          ADD COLUMN IF NOT EXISTS customer_price NUMERIC(10,2),
+          ADD COLUMN IF NOT EXISTS partner_product_url VARCHAR(500),
+          ADD COLUMN IF NOT EXISTS is_duplicate BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS duplicate_group_id UUID,
+          ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP;
+
+        -- Create warehouse_locations table
+        CREATE TABLE IF NOT EXISTS warehouse_locations (
+            location_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            partner_id UUID REFERENCES partners(partner_id) ON DELETE CASCADE,
+            location_name VARCHAR(255) NOT NULL,
+            address VARCHAR(500) NOT NULL,
+            address_lat NUMERIC(10,7) NOT NULL,
+            address_lng NUMERIC(10,7) NOT NULL,
+            service_area_radius_miles NUMERIC(6,2),
+            service_area_cities JSONB,
+            contact_person VARCHAR(255),
+            contact_phone VARCHAR(50),
+            contact_email VARCHAR(255),
+            is_active BOOLEAN DEFAULT TRUE,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Create inventory_sync_logs table
+        CREATE TABLE IF NOT EXISTS inventory_sync_logs (
+            sync_log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            partner_id UUID REFERENCES partners(partner_id) ON DELETE CASCADE,
+            warehouse_location_id UUID REFERENCES warehouse_locations(location_id) ON DELETE SET NULL,
+            sync_type VARCHAR(50),
+            items_added INTEGER DEFAULT 0,
+            items_updated INTEGER DEFAULT 0,
+            items_removed INTEGER DEFAULT 0,
+            status VARCHAR(50) DEFAULT 'pending',
+            error_message TEXT,
+            sync_started_at TIMESTAMP,
+            sync_completed_at TIMESTAMP
+        );
+        """
+        
+        # Execute the SQL
+        db.execute(text(sql))
+        db.commit()
+        
+        # Now add foreign keys and indexes in separate statements
+        fk_sql = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints
+                          WHERE constraint_name='fk_inventory_partner') THEN
+                ALTER TABLE inventory_items
+                ADD CONSTRAINT fk_inventory_partner
+                FOREIGN KEY (partner_id) REFERENCES partners(partner_id) ON DELETE SET NULL;
+            END IF;
+
+            IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints
+                          WHERE constraint_name='fk_inventory_warehouse_location') THEN
+                ALTER TABLE inventory_items
+                ADD CONSTRAINT fk_inventory_warehouse_location
+                FOREIGN KEY (warehouse_location_id) REFERENCES warehouse_locations(location_id) ON DELETE SET NULL;
+            END IF;
+        END $$;
+        """
+        
+        db.execute(text(fk_sql))
+        db.commit()
+        
+        # Add indexes
+        index_sql = """
+        CREATE INDEX IF NOT EXISTS idx_bookings_delivery_date ON bookings(delivery_date);
+        CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
+        CREATE INDEX IF NOT EXISTS idx_bookings_customer_id ON bookings(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_bookings_assigned_driver ON bookings(assigned_driver_id);
+        CREATE INDEX IF NOT EXISTS idx_booking_items_booking_id ON booking_items(booking_id);
+        CREATE INDEX IF NOT EXISTS idx_booking_items_inventory ON booking_items(inventory_item_id);
+        CREATE INDEX IF NOT EXISTS idx_inventory_category ON inventory_items(category);
+        CREATE INDEX IF NOT EXISTS idx_inventory_status ON inventory_items(status);
+        CREATE INDEX IF NOT EXISTS idx_inventory_website_visible ON inventory_items(website_visible);
+        CREATE INDEX IF NOT EXISTS idx_inventory_partner ON inventory_items(partner_id) WHERE partner_id IS NOT NULL;
+        """
+        
+        db.execute(text(index_sql))
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": "Partner inventory schema applied successfully"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Schema fix failed: {str(e)}"
+        )
