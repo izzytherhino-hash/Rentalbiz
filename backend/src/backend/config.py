@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # External APIs
     google_maps_api_key: str = "placeholder"
+    here_api_key: str = "placeholder"
     stripe_secret_key: str = "sk_test_placeholder"
     stripe_publishable_key: str = "pk_test_placeholder"
     stripe_webhook_secret: str = "whsec_placeholder"

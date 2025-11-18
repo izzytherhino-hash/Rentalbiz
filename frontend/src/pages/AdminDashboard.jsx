@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Package, Truck, MapPin, DollarSign, AlertCircle, Clock, Search, Plus, Filter, Users, Warehouse, CheckCircle, Calendar, X, Edit, Trash2, List, Map, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Package, Truck, MapPin, DollarSign, AlertCircle, Clock, Search, Plus, Filter, Users, Warehouse, CheckCircle, Calendar, X, Edit, Trash2, List, Map, LayoutGrid, ChevronLeft, ChevronRight, Compass } from 'lucide-react'
 import { adminAPI, inventoryAPI, driverAPI, API_BASE_URL } from '../services/api'
 import Chatbot from '../components/Chatbot'
 import InventoryModal from '../components/InventoryModal'
@@ -7,6 +7,7 @@ import InventoryCalendarModal from '../components/InventoryCalendarModal'
 import DriverCalendarModal from '../components/DriverCalendarModal'
 import InventoryMap from '../components/InventoryMap'
 import PartnerManagement from '../components/PartnerManagement'
+import CraigslistSearch from '../components/CraigslistSearch'
 import {
   generateCalendarDays,
   getBookingsForDate,
@@ -514,6 +515,17 @@ export default function AdminDashboard() {
             >
               <Users className="w-4 h-4 inline mr-2" />
               Partners
+            </button>
+            <button
+              onClick={() => setView('explore')}
+              className={`py-4 px-2 border-b-2 font-medium text-sm transition ${
+                view === 'explore'
+                  ? 'border-yellow-400 text-yellow-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Compass className="w-4 h-4 inline mr-2" />
+              Explore
             </button>
           </div>
         </div>
@@ -1467,6 +1479,11 @@ export default function AdminDashboard() {
         {/* Partners View */}
         {view === 'partners' && (
           <PartnerManagement />
+        )}
+
+        {/* Explore View */}
+        {view === 'explore' && (
+          <CraigslistSearch />
         )}
 
         {/* Unassigned Trips View */}

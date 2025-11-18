@@ -1,60 +1,10 @@
-import React, { useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
-import L from 'leaflet'
-
-// Fix Leaflet default marker icon issue with Webpack/Vite
-delete L.Icon.Default.prototype._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-})
-
-// Create custom colored marker icons for different statuses
-const createColoredIcon = (color) => {
-  return new L.Icon({
-    iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41]
-  })
-}
-
-// Create marker with count badge
-const createMarkerWithCount = (color, count) => {
-  if (count <= 1) {
-    return createColoredIcon(color)
-  }
-
-  return new L.DivIcon({
-    html: `
-      <div style="position: relative;">
-        <img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png"
-             style="width: 25px; height: 41px;" />
-        <div style="position: absolute; top: -8px; right: -8px; background: #EF4444; color: white;
-                    border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center;
-                    justify-content: center; font-size: 12px; font-weight: bold; border: 2px solid white;">
-          ${count}
-        </div>
-      </div>
-    `,
-    className: '',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-  })
-}
-
-const statusIcons = {
-  available: createColoredIcon('green'),   // 🟢 Available at warehouse
-  rented: createColoredIcon('red'),        // 🔴 Rented (at customer)
-  maintenance: createColoredIcon('grey'),  // ⚫ In maintenance
-  retired: createColoredIcon('black'),     // ⚫ Retired
-}
+import React, { useEffect, useRef, useMemo } from 'react'
 
 const InventoryMap = ({ inventory = [], warehouses = [], bookings = [] }) => {
+  const mapRef = useRef(null)
+  const mapInstanceRef = useRef(null)
+  const markersRef = useRef([])
+
   // Calculate item locations and group by coordinates
   const itemLocations = useMemo(() => {
     const locationMap = new Map()
@@ -187,156 +137,254 @@ const InventoryMap = ({ inventory = [], warehouses = [], bookings = [] }) => {
     return Array.from(locationMap.values())
   }, [warehouses, inventory])
 
-  // Center map on Orange County, CA (between Santa Ana and Newport Beach)
-  const center = [33.6595, -117.9]
-  const zoom = 11
+  useEffect(() => {
+    if (!mapRef.current) return
+
+    const HERE_API_KEY = import.meta.env.VITE_HERE_API_KEY
+
+    if (!HERE_API_KEY || HERE_API_KEY === 'placeholder_here_api_key') {
+      console.warn('HERE API key not configured')
+      return
+    }
+
+    // Load HERE Maps script if not already loaded
+    if (!window.H) {
+      const script = document.createElement('script')
+      script.src = 'https://js.api.here.com/v3/3.1/mapsjs-core.js'
+      script.async = true
+      script.onload = () => {
+        // Load additional HERE Maps modules
+        Promise.all([
+          loadScript('https://js.api.here.com/v3/3.1/mapsjs-service.js'),
+          loadScript('https://js.api.here.com/v3/3.1/mapsjs-ui.js'),
+          loadScript('https://js.api.here.com/v3/3.1/mapsjs-mapevents.js'),
+          loadCSS('https://js.api.here.com/v3/3.1/mapsjs-ui.css')
+        ]).then(() => {
+          initializeMap()
+        })
+      }
+      document.head.appendChild(script)
+    } else {
+      initializeMap()
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = src
+        script.async = true
+        script.onload = resolve
+        script.onerror = reject
+        document.head.appendChild(script)
+      })
+    }
+
+    function loadCSS(href) {
+      return new Promise((resolve) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = href
+        link.onload = resolve
+        document.head.appendChild(link)
+      })
+    }
+
+    function initializeMap() {
+      if (!window.H || mapInstanceRef.current) return
+
+      // Initialize HERE platform
+      const platform = new window.H.service.Platform({
+        apikey: HERE_API_KEY
+      })
+
+      const defaultLayers = platform.createDefaultLayers()
+
+      // Initialize map centered on Orange County, CA
+      const map = new window.H.Map(
+        mapRef.current,
+        defaultLayers.vector.normal.map,
+        {
+          center: { lat: 33.6595, lng: -117.9 },
+          zoom: 11,
+          pixelRatio: window.devicePixelRatio || 1
+        }
+      )
+
+      // Enable map interactions
+      const behavior = new window.H.mapevents.Behavior(new window.H.mapevents.MapEvents(map))
+      const ui = window.H.ui.UI.createDefault(map, defaultLayers)
+
+      mapInstanceRef.current = map
+
+      // Clear existing markers
+      markersRef.current.forEach(marker => map.removeObject(marker))
+      markersRef.current = []
+
+      // Add item location markers
+      itemLocations.forEach(location => {
+        const hasAvailable = location.items.some(item => item.status === 'available')
+        const hasRented = location.items.some(item => item.status === 'rented')
+        const markerColor = hasRented ? '#EF4444' : hasAvailable ? '#10B981' : '#6B7280'
+
+        // Create marker HTML with count badge
+        const markerHTML = `
+          <div style="position: relative;">
+            <div style="
+              width: 30px;
+              height: 30px;
+              background: ${markerColor};
+              border: 3px solid white;
+              border-radius: 50%;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            "></div>
+            ${location.items.length > 1 ? `
+              <div style="
+                position: absolute;
+                top: -8px;
+                right: -8px;
+                background: #EF4444;
+                color: white;
+                border-radius: 50%;
+                width: 20px;
+                height: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                font-weight: bold;
+                border: 2px solid white;
+              ">${location.items.length}</div>
+            ` : ''}
+          </div>
+        `
+
+        const icon = new window.H.map.DomIcon(markerHTML)
+        const marker = new window.H.map.DomMarker({ lat: location.lat, lng: location.lng }, { icon })
+
+        // Create info bubble content
+        const bubbleContent = createBubbleContent(location, false)
+        marker.setData(bubbleContent)
+
+        marker.addEventListener('tap', function (evt) {
+          const bubble = new window.H.ui.InfoBubble(evt.target.getGeometry(), {
+            content: evt.target.getData()
+          })
+          ui.addBubble(bubble)
+        })
+
+        map.addObject(marker)
+        markersRef.current.push(marker)
+      })
+
+      // Add warehouse location markers
+      warehouseLocations.forEach(location => {
+        const markerHTML = `
+          <div style="position: relative;">
+            <div style="
+              width: 30px;
+              height: 30px;
+              background: #3B82F6;
+              border: 3px solid white;
+              border-radius: 50%;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            "></div>
+            ${location.items.length > 1 ? `
+              <div style="
+                position: absolute;
+                top: -8px;
+                right: -8px;
+                background: #EF4444;
+                color: white;
+                border-radius: 50%;
+                width: 20px;
+                height: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                font-weight: bold;
+                border: 2px solid white;
+              ">${location.items.length}</div>
+            ` : ''}
+          </div>
+        `
+
+        const icon = new window.H.map.DomIcon(markerHTML)
+        const marker = new window.H.map.DomMarker({ lat: location.lat, lng: location.lng }, { icon })
+
+        const bubbleContent = createBubbleContent(location, true)
+        marker.setData(bubbleContent)
+
+        marker.addEventListener('tap', function (evt) {
+          const bubble = new window.H.ui.InfoBubble(evt.target.getGeometry(), {
+            content: evt.target.getData()
+          })
+          ui.addBubble(bubble)
+        })
+
+        map.addObject(marker)
+        markersRef.current.push(marker)
+      })
+    }
+
+    function createBubbleContent(location, isWarehouse) {
+      const items = location.items.map((item, idx) => `
+        <div style="${idx > 0 ? 'padding-top: 12px; border-top: 1px solid #e5e7eb;' : ''}">
+          ${item.thumbnail ? `
+            <div style="width: 100%; height: 96px; background: #f3f4f6; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px;">
+              <img src="${item.thumbnail}" alt="${item.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px;" onerror="this.style.display='none'" loading="lazy" />
+            </div>
+          ` : ''}
+          <div>
+            <h4 style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${item.name}</h4>
+            <div style="font-size: 12px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <span style="padding: 2px 8px; font-size: 12px; border-radius: 9999px;
+                  background: ${item.status === 'available' ? '#dcfce7' : item.status === 'rented' ? '#fee2e2' : item.status === 'maintenance' ? '#f3f4f6' : '#000'};
+                  color: ${item.status === 'available' ? '#166534' : item.status === 'rented' ? '#991b1b' : item.status === 'maintenance' ? '#374151' : '#fff'};
+                ">${item.status.toUpperCase()}</span>
+              </div>
+              <p><strong>Category:</strong> ${item.category}</p>
+              <p><strong>Price:</strong> $${parseFloat(item.base_price).toFixed(2)}</p>
+              ${isWarehouse && location.warehouses.length > 1 ? `<p><strong>Warehouse:</strong> ${item.warehouseName}</p>` : ''}
+            </div>
+          </div>
+        </div>
+      `).join('')
+
+      return `
+        <div style="min-width: 250px; max-width: 300px; padding: 8px;">
+          <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb;">
+            <h3 style="font-weight: bold; font-size: 16px;">
+              ${isWarehouse ? location.warehouses.map(wh => wh.name).join(', ') : location.location}
+            </h3>
+            <p style="font-size: 12px; color: #6b7280;">
+              ${location.items.length} item${location.items.length > 1 ? 's' : ''} at this location
+            </p>
+          </div>
+          <div style="max-height: 400px; overflow-y: auto;">
+            ${items}
+          </div>
+        </div>
+      `
+    }
+
+    // Cleanup
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.dispose()
+        mapInstanceRef.current = null
+      }
+    }
+  }, [itemLocations, warehouseLocations])
 
   return (
     <div className="w-full h-full">
-      <MapContainer
-        center={center}
-        zoom={zoom}
+      <div
+        ref={mapRef}
         style={{ height: '100%', width: '100%', minHeight: '600px' }}
         className="rounded-lg shadow-md"
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        {itemLocations.map((location) => {
-          // Determine icon color based on the statuses of items at this location
-          const hasAvailable = location.items.some(item => item.status === 'available')
-          const hasRented = location.items.some(item => item.status === 'rented')
-          const markerColor = hasRented ? 'red' : hasAvailable ? 'green' : 'grey'
-
-          return (
-            <Marker
-              key={`item-${location.lat}-${location.lng}-${location.items.length}`}
-              position={[location.lat, location.lng]}
-              icon={createMarkerWithCount(markerColor, location.items.length)}
-            >
-              <Popup maxWidth={300}>
-                <div className="min-w-[250px] max-w-[300px]">
-                  {/* Location Header */}
-                  <div className="mb-2 pb-2 border-b border-gray-200">
-                    <h3 className="font-bold text-base">{location.location}</h3>
-                    <p className="text-xs text-gray-600">{location.items.length} item{location.items.length > 1 ? 's' : ''} at this location</p>
-                  </div>
-
-                  {/* List all items at this location */}
-                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                    {location.items.map((item, itemIdx) => (
-                      <div key={item.id} className={`${itemIdx > 0 ? 'pt-3 border-t border-gray-100' : ''}`}>
-                        {/* Thumbnail Image */}
-                        {item.thumbnail && (
-                          <div className="w-full h-24 bg-gray-100 mb-2 flex items-center justify-center rounded">
-                            <img
-                              src={item.thumbnail}
-                              alt={item.name}
-                              className="w-full h-full object-cover rounded"
-                              onError={(e) => {
-                                console.error('Map marker image failed to load:', item.thumbnail)
-                                e.target.style.display = 'none'
-                              }}
-                              loading="lazy"
-                            />
-                          </div>
-                        )}
-
-                        <div>
-                          <h4 className="font-semibold text-sm mb-1">{item.name}</h4>
-                          <div className="text-xs space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className={`px-2 py-0.5 text-xs rounded-full ${
-                                item.status === 'available' ? 'bg-green-100 text-green-800' :
-                                item.status === 'rented' ? 'bg-red-100 text-red-800' :
-                                item.status === 'maintenance' ? 'bg-gray-100 text-gray-800' :
-                                'bg-black text-white'
-                              }`}>
-                                {item.status.toUpperCase()}
-                              </span>
-                            </div>
-                            <p><strong>Category:</strong> {item.category}</p>
-                            <p><strong>Price:</strong> ${parseFloat(item.base_price).toFixed(2)}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          )
-        })}
-
-        {/* Add warehouse markers */}
-        {warehouseLocations.map((location) => (
-          <Marker
-            key={`warehouse-${location.lat}-${location.lng}-${location.items.length}`}
-            position={[location.lat, location.lng]}
-            icon={createMarkerWithCount('blue', location.items.length)}
-          >
-            <Popup maxWidth={300}>
-              <div className="min-w-[250px] max-w-[300px]">
-                {/* Location Header */}
-                <div className="mb-2 pb-2 border-b border-gray-200">
-                  <h3 className="font-bold text-base">
-                    {location.warehouses.map(wh => wh.name).join(', ')}
-                  </h3>
-                  <p className="text-xs text-gray-600">
-                    {location.items.length} item{location.items.length > 1 ? 's' : ''} at this location
-                  </p>
-                </div>
-
-                {/* List all items at this location */}
-                <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                  {location.items.map((item, itemIdx) => (
-                    <div key={item.id} className={`${itemIdx > 0 ? 'pt-3 border-t border-gray-100' : ''}`}>
-                      {/* Thumbnail Image */}
-                      {item.thumbnail && (
-                        <div className="w-full h-24 bg-gray-100 mb-2 flex items-center justify-center rounded">
-                          <img
-                            src={item.thumbnail}
-                            alt={item.name}
-                            className="w-full h-full object-cover rounded"
-                            onError={(e) => {
-                              console.error('Map marker image failed to load:', item.thumbnail)
-                              e.target.style.display = 'none'
-                            }}
-                            loading="lazy"
-                          />
-                        </div>
-                      )}
-
-                      <div>
-                        <h4 className="font-semibold text-sm mb-1">{item.name}</h4>
-                        <div className="text-xs space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 text-xs rounded-full ${
-                              item.status === 'available' ? 'bg-green-100 text-green-800' :
-                              item.status === 'rented' ? 'bg-red-100 text-red-800' :
-                              item.status === 'maintenance' ? 'bg-gray-100 text-gray-800' :
-                              'bg-black text-white'
-                            }`}>
-                              {item.status.toUpperCase()}
-                            </span>
-                          </div>
-                          <p><strong>Category:</strong> {item.category}</p>
-                          <p><strong>Price:</strong> ${parseFloat(item.base_price).toFixed(2)}</p>
-                          {location.warehouses.length > 1 && (
-                            <p><strong>Warehouse:</strong> {item.warehouseName}</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
+      />
     </div>
   )
 }

@@ -138,6 +138,7 @@ from backend.api.phineas import router as phineas_router
 from backend.api.routes import router as routes_router
 from backend.api.warehouses import router as warehouses_router
 from backend.api.partners import router as partners_router
+from backend.api.explore import router as explore_router
 
 # Try to import inventory_sync router (requires scraping dependencies)
 try:
@@ -159,6 +160,7 @@ if inventory_sync_available:
 app.include_router(chatbot_router, prefix="/api/admin/chatbot", tags=["Chatbot"])
 app.include_router(phineas_router, prefix="/api/admin/phineas", tags=["Phineas"])
 app.include_router(routes_router, prefix="/api/routes", tags=["Routes"])
+app.include_router(explore_router, prefix="/api/explore", tags=["Explore"])
 
 # Mount static files for uploads
 uploads_dir = Path(__file__).parent.parent.parent / "uploads"

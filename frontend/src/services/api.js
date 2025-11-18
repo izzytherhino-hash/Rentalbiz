@@ -546,6 +546,24 @@ export const warehouseLocationAPI = {
   },
 };
 
+// Explore API
+export const exploreAPI = {
+  /**
+   * Search Craigslist using AI-powered natural language processing.
+   */
+  searchCraigslist: async (prompt, locations, maxResults = 50, category = 'all') => {
+    return apiFetch('/api/explore/craigslist/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt,
+        locations,
+        max_results: maxResults,
+        category,
+      }),
+    });
+  },
+};
+
 // Health check
 export const healthCheck = async () => {
   return apiFetch('/health');

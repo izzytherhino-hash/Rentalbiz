@@ -14,8 +14,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configuration
-USE_GOOGLE_MAPS = os.getenv("USE_GOOGLE_MAPS", "false").lower() == "true"
+GEOCODING_PROVIDER = os.getenv("GEOCODING_PROVIDER", "osm").lower()  # "here", "google", or "osm"
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+HERE_API_KEY = os.getenv("HERE_API_KEY", "")
 
 
 def haversine_distance(
@@ -145,6 +146,44 @@ def geocode_address_google(address: str) -> Optional[Tuple[float, float]]:
         return None
 
 
+@lru_cache(maxsize=1000)
+def geocode_address_here(address: str) -> Optional[Tuple[float, float]]:
+    """
+    Geocode an address using HERE Geocoding API.
+
+    Args:
+        address: Full address string
+
+    Returns:
+        Tuple of (latitude, longitude) or None if geocoding fails
+    """
+    if not HERE_API_KEY:
+        logger.error("HERE API key not configured")
+        return None
+
+    try:
+        url = "https://geocode.search.hereapi.com/v1/geocode"
+        params = {"q": address, "apiKey": HERE_API_KEY, "limit": 1}
+
+        response = requests.get(url, params=params, timeout=5)
+        response.raise_for_status()
+
+        data = response.json()
+        if data.get("items") and len(data["items"]) > 0:
+            position = data["items"][0]["position"]
+            lat = position["lat"]
+            lon = position["lng"]
+            logger.info(f"Geocoded '{address}' to ({lat}, {lon}) via HERE")
+            return (lat, lon)
+
+        logger.warning(f"HERE geocoding returned no results for: {address}")
+        return None
+
+    except Exception as e:
+        logger.error(f"HERE geocoding failed for '{address}': {e}")
+        return None
+
+
 def geocode_address(address: str) -> Optional[Tuple[float, float]]:
     """
     Geocode an address using configured provider.
@@ -158,7 +197,9 @@ def geocode_address(address: str) -> Optional[Tuple[float, float]]:
     if not address or not address.strip():
         return None
 
-    if USE_GOOGLE_MAPS:
+    if GEOCODING_PROVIDER == "here":
+        return geocode_address_here(address)
+    elif GEOCODING_PROVIDER == "google":
         return geocode_address_google(address)
     else:
         return geocode_address_osm(address)
